@@ -1,7 +1,7 @@
 <idea-plugin>
   <id>com.bookreader.reader</id>
   <name>book-read</name>
-  <version>3.5.0</version>
+  <version>3.5.4</version>
   <idea-version since-build="231"/>
 
   <vendor email="bookreader@example.com" url="https://gitee.com/wind_invade/chapter_reader">BookReader</vendor>

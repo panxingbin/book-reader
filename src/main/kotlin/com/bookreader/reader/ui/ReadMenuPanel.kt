@@ -2,9 +2,6 @@ package com.bookreader.reader.ui
 
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.ActionPlaces
-import com.intellij.openapi.actionSystem.AnActionEvent
-import com.intellij.openapi.actionSystem.CommonDataKeys
-import com.intellij.openapi.actionSystem.DataContext
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.popup.JBPopup
@@ -40,7 +37,15 @@ import javax.swing.SwingConstants
  * popup can never behave differently from the real menu.
  */
 class ReadMenuPanel(
-    private val project: Project,
+    /**
+     * Component the action system resolves each action's `DataContext` from — normally the
+     * tool window the popup was opened for, which stays attached after the popup closes.
+     *
+     * [ActionManager.tryToExecute] (the trigger path this panel uses, see [invoke]) takes a
+     * `Component` rather than a `DataContext`, so the panel's own component would be useless
+     * here: by the time an action fires, `beforeInvoke` has already cancelled the popup.
+     */
+    private val contextComponent: JComponent,
     /** Called just before an action runs, so the popup can close first. */
     private val beforeInvoke: () -> Unit = {},
 ) : JPanel() {
@@ -71,17 +76,22 @@ class ReadMenuPanel(
     }
 
     /**
-     * Invoke the registered action with a data context that resolves the project,
-     * so actions that need `event.project` work exactly as they do from the menu.
+     * Invoke the registered action through the platform's own trigger path, so `update()`
+     * runs first, disabled rows stay dead, and actions that need `event.project` resolve it
+     * from the [contextComponent]'s DataContext exactly as they do from the menu.
      */
     private fun invoke(actionId: String) {
         val action = ActionManager.getInstance().getAction(actionId) ?: return
-        val context = object : DataContext {
-            override fun getData(dataId: String): Any? =
-                if (CommonDataKeys.PROJECT.`is`(dataId)) project else null
-        }
-        val event = AnActionEvent.createFromAnAction(action, null, ActionPlaces.UNKNOWN, context)
-        action.actionPerformed(event)
+        // Two verifier rules collide here:
+        //  - AnAction.actionPerformed(AnActionEvent) is @ApiStatus.OverrideOnly: plugins may
+        //    override it, never call it, or the Marketplace rejects the build.
+        //  - The obvious escape, ActionUtil.invokeAction, is itself @Deprecated on current
+        //    platforms, and its replacement ActionUtil.performAction needs an AnActionEvent
+        //    built by AnActionEvent.createEvent, which 2023.2 does not have.
+        // ActionManager.tryToExecute is the one trigger that is public, unannotated in every
+        // release, and as old as the supported range: it runs update(), the enabled check and
+        // the action itself, deriving the DataContext from the component we hand it.
+        ActionManager.getInstance().tryToExecute(action, null, contextComponent, ActionPlaces.UNKNOWN, true)
     }
 
     /** One clickable feature. */
@@ -172,7 +182,7 @@ object ReadMenuPopup {
      */
     fun show(project: Project, anchor: JComponent) {
         var popup: JBPopup? = null
-        val panel = ReadMenuPanel(project) { popup?.cancel() }
+        val panel = ReadMenuPanel(anchor) { popup?.cancel() }
 
         val scroll = JBScrollPane(panel).apply {
             border = null
@@ -202,7 +212,7 @@ object ReadMenuPopup {
      */
     fun show(project: Project, toolWindow: ToolWindow, clickPoint: java.awt.Point?) {
         var popup: JBPopup? = null
-        val panel = ReadMenuPanel(project) { popup?.cancel() }
+        val panel = ReadMenuPanel(toolWindow.component) { popup?.cancel() }
 
         val scroll = JBScrollPane(panel).apply {
             border = null

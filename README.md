@@ -265,13 +265,36 @@ kotlin.compiler.execution.strategy=in-process
 
 ### 命令
 
+仓库没有 wrapper 脚本，Gradle 用缓存里那份 8.10，并显式指向工作区内的
+`.gradle-home`（依赖都缓存在这里，代理与 `in-process` 编译策略也只在它的
+`gradle.properties` 生效）：
+
 ```bash
-gradle compileKotlin       # 编译
-gradle verifyReader        # 纯逻辑验证（见下）
-gradle checkPluginVersion  # 版本号一致性检查（buildPlugin 会先自动跑）
-gradle buildPlugin         # 产物 build/distributions/book-reader-<版本>.zip
-gradle runIde              # 启动沙箱 IDE 实测
+export JAVA_HOME="C:\\Program Files\\Java\\jdk-17.0.6"   # 必须 ≥ 11，否则 gradle 插件报 Java 8
+export GRADLE_USER_HOME="$PWD/.gradle-home"
+G="C:\\Users\\<user>\\.gradle\\wrapper\\dists\\gradle-8.10-bin\\<hash>\\gradle-8.10\\bin\\gradle.bat"
+
+"$G" --offline compileKotlin       # 编译
+"$G" --offline verifyReader        # 纯逻辑验证（见下）
+"$G" --offline checkPluginVersion  # 版本号一致性检查（buildPlugin 会先自动跑）
+"$G" --offline buildPlugin         # 产物 build/distributions/book-reader-<版本>.zip
+"$G" --offline runIde              # 启动沙箱 IDE 实测
 ```
+
+`--offline` 不可省：走代理解析依赖超时，最终也会回落到缓存。
+`.build/gradle-run.bat` 是同一件事的 Windows 包装（后台写 `build.log`），二选一即可。
+
+Marketplace 校验用 [tools/verifier/run-verifier.ps1](tools/verifier/run-verifier.ps1)：
+
+```bash
+powershell -File tools/verifier/run-verifier.ps1 -PluginZip build/distributions/book-reader-3.5.4.zip
+```
+
+它默认校验**构建目标 IDE（2023.2）**。注意这只覆盖最低版本：3.5.3 就是这样
+本地 PASS、上传后仍被拒的——Marketplace 跑的是**当前** IDE，弃用标注只在新版出现。
+想提前拦住这类问题，需要另外拿一份新 IDE 来跑同一个 CLI，做法与实测结果见
+[tools/verifier/verify-against-latest.md](tools/verifier/verify-against-latest.md)
+（3.5.3 在 2026.2 上精确复现 Marketplace 的 4 处弃用引用；3.5.4 在 2023.2 与 2026.2 上均 PASS）。
 
 ### 版本号（打包前必做）
 
@@ -297,6 +320,82 @@ pluginVersion=3.1.0
 > 本工作区**无法在前台跑长构建**（执行器会把它转后台并失败），因此仓库里带了
 > `.build/gradle-run.bat`：它把输出写到 `build.log` 并以后台进程运行。
 > 用法：先启动该 bat，再轮询 `build.log`。
+
+### Marketplace 上传校验（服务端，本地 IDE 装不出来）
+
+Marketplace 在上传时会跑两道**服务端**校验，本地 `buildPlugin` 成功并不代表能过：
+
+1. **`<description>` 必须以拉丁字符开头，且前 40 个字符内不能有中日韩字符。**
+   真实规则来自 `structure-base` 的 `ValidatorKt.validateDescriptionIsCorrect`：剥掉 HTML
+   后必须在**下标 0** 处匹配 `^[\w\s\p{Punct}–—]{40,}`。`\w` 与 `\p{Punct}` 都是 ASCII-only，
+   所以第 40 位之前出现一个汉字，匹配就会提前结束并直接判失败。
+   中文文案**不要删**，把它整体挪到拉丁开头之后即可（见 [plugin.xml](src/main/resources/META-INF/plugin.xml)）。
+   仓库里的 `tools/descriptor-check/ValidatorProbe.java` 就是这条规则的本地复现器。
+
+2. **不得使用平台内部 API。** 最常见的就是自己实现 `DataContext`：该接口是
+   `@ApiStatus.NonExtendable`，一旦匿名覆写 `getData(String)`，Verifier 会报
+   `Internal method usage — DataContext.getData(String)`。
+   **正确写法**是用平台自带的工厂：
+
+   ```kotlin
+   val context = SimpleDataContext.getProjectContext(project)
+   ```
+
+   `SimpleDataContext` 虽在 `.impl.` 包下，但**没有任何 `@ApiStatus.Internal` 标注**，
+   平台文档也明确推荐用它替代手写 `DataContext`。
+   但**别顺手拿它造 `AnActionEvent`**（`AnActionEvent.createFromAnAction(action, null, place, context)`）：
+   新版平台上这些工厂全部 `@Deprecated(forRemoval = true)`，会命中第 5 条。
+   触发动作请直接走第 3 条的 `ActionManager.tryToExecute`，DataContext 由它从 Component 解析。
+
+3. **不得调用标了 `@ApiStatus.OverrideOnly` 的方法。**
+   最常见的是 `AnAction.actionPerformed(AnActionEvent)`：插件可以**覆写**它，但绝不能**调用**它，
+   否则 Verifier 报 `Override-only method usage violation`。
+   **正确写法**是走平台的正规触发路径（它内部会先跑 `update()` 再执行）：
+
+   ```kotlin
+   ActionManager.getInstance().tryToExecute(
+       action,
+       null,               // inputEvent
+       contextComponent,   // 用它解析 DataContext（项目、编辑器…）
+       ActionPlaces.UNKNOWN,
+       true,               // now：在当前 EDT 上立即执行
+   )
+   ```
+
+   `tryToExecute` 是 `ActionManager` 的公开抽象方法，**从 231 到最新版本都存在，
+   且没有任何弃用/内部标注**——这是它胜出的原因，因为其它触发路径都断了：
+
+   - `ActionUtil.invokeAction(...)` 新版已 `@Deprecated`（3.5.3 就是被这条拒的）；
+     它的替代品 `ActionUtil.performAction(action, event)` 需要 `AnActionEvent.createEvent(...)`
+     造事件，而这两个 API 2023.2 上都不存在（`javap` 可验证）；
+   - `AnActionEvent.createFromAnAction(...)` 及旧构造函数同样是 `@Deprecated(forRemoval = true)`。
+
+   代价是它只能从 **Component** 解析 DataContext（不传则退化为当前焦点窗口的上下文），
+   所以要传一个**始终挂载、且属于目标项目**的组件：见 `ReadMenuPanel` 传的是工具窗组件——
+   面板自己的组件到执行时已经被 `beforeInvoke` 关闭的弹窗带离窗口树，不能再用。
+
+4. **被驳回的版本号不能重复上传**，改完必须升版本号（`pluginVersion` + 源 `plugin.xml` 的 `<version>`）。
+
+5. **不要调用标了 `@Deprecated` 的 API**（Verifier 报 `Deprecated methods usages` / `Deprecated constructor usage`）。
+   本项目踩过的四处（其中两处是 3.5.3 被拒后回查出来的）：
+
+   | 弃用 API | 替代写法 |
+   |---|---|
+   | `FileChooserDescriptorFactory.createSingleFileDescriptor()` | 当时换成了 `createSingleLocalFileDescriptor()`，**但它从 2025-02 起（IJPL-150176）也被 `@Deprecated` 了**（“其实允许选目录”），推荐的 `singleFile()` 2023.2 上又没有 → 改用公开构造函数 `FileChooserDescriptor(true, false, false, false, false, false)`，所有版本都有，新版只标 `@ApiStatus.Obsolete`（见 `ReaderController.singleFileDescriptor`） |
+   | `StatusBar.addWidget(StatusBarWidget)` | 用 `statusBarWidgetFactory` 扩展点（见 `plugin.xml` 的 `BookReaderStatus`）；四个 `addWidget` 重载全部弃用 |
+   | `ActionUtil.invokeAction(...)` | `ActionManager.tryToExecute(...)`（见第 3 条；3.5.3 被拒的主因之一） |
+   | `FileSaverDescriptor(String, String, String...)` | 新版的 `FileSaverDescriptor(String, String)` + `withExtensionFilter(String)` 与 2023.2 的 varargs 构造函数**在源码层面互斥**（新构造函数 2023.2 根本没有）→ 两个都走反射调用：字节码里不出现任何一个构造函数的引用，Verifier 只看字节码引用，就无从报起（见 `ReaderActions.saveDialogDescriptor`） |
+
+   > **Verifier 到底认什么**：只认 `@Deprecated`（Java/Kotlin 两种写法）与 `@ScheduledForRemoval`。
+   > `@ApiStatus.Obsolete` 不报（verifier-cli 的 `DeprecationUtilKt` 不解析它），上表第一行
+   > 的构造函数、以及 `createSingleFileDescriptor(FileType)` 这类 Obsolete 方法都能过——这是
+   > `since-build="231"` 下唯一还剩的余地。Obsolete 方法日后若被改成 `@Deprecated`（就像
+   > `createSingleLocalFileDescriptor` 刚经历的那样），会再次被拒，届时只能升最低版本。
+
+   > **为什么不能直接用新 API**：`singleFile()`（2025-02）、新的 `FileSaverDescriptor` 构造函数、
+   > `ActionUtil.performAction` / `AnActionEvent.createEvent` 全部只在较新平台存在（2023.2 上
+   > 都没有），直接换等于放弃 2023.2–2024.x 用户。上面几行都是“新旧版本都能跑、且两边都无弃用引用”的写法；
+   > 若日后提高最低版本，三处都可以换成直接调用。
 
 ### 依赖
 

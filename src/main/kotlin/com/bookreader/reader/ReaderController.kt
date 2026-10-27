@@ -6,7 +6,7 @@ import com.bookreader.reader.ui.ReaderStatusBar
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.fileChooser.FileChooser
-import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
+import com.intellij.openapi.fileChooser.FileChooserDescriptor
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
@@ -326,8 +326,7 @@ class ReaderController(private val project: Project) {
     }
 
     private fun chooseLocalText(mode: ReaderMode, onChosen: (File) -> Unit) {
-        val descriptor = FileChooserDescriptorFactory.createSingleFileDescriptor()
-            .withTitle("${mode.title} — 选择小说文件")
+        val descriptor = singleFileDescriptor("${mode.title} — 选择小说文件")
             .withFileFilter { file -> !file.isDirectory && file.extension?.lowercase() in TEXT_EXTENSIONS }
 
         val chosen = FileChooser.chooseFile(descriptor, project, lastDirectory()) ?: return
@@ -337,14 +336,32 @@ class ReaderController(private val project: Project) {
     }
 
     private fun chooseEpub(onChosen: (File) -> Unit) {
-        val descriptor = FileChooserDescriptorFactory.createSingleFileDescriptor()
-            .withTitle("选择 Epub 文件")
+        val descriptor = singleFileDescriptor("选择 Epub 文件")
             .withFileFilter { file -> !file.isDirectory && file.extension?.lowercase() == "epub" }
 
         val chosen = FileChooser.chooseFile(descriptor, project, lastDirectory()) ?: return
         val file = File(chosen.path)
         if (file.isFile) onChosen(file)
     }
+
+    /**
+     * A "choose one file" descriptor, built without the deprecated factory methods.
+     *
+     * `FileChooserDescriptorFactory.createSingleFileDescriptor()` and its replacement
+     * `createSingleLocalFileDescriptor()` are both `@Deprecated` on current platforms
+     * (the latter wrongly allows directories), while the replacement the javadoc names,
+     * `singleFile()`, only appeared in 2025 and so is missing from 2023.2–2024.x. The public
+     * constructor is the common denominator of every supported version: 2023.2 has it, current
+     * platforms only mark it `@ApiStatus.Obsolete`, and the verifier reports `@Deprecated` —
+     * not Obsolete (it ignores that annotation).
+     *
+     * The flags are exactly `singleFile()`'s: one file, no folders, no jars, single selection.
+     * Any narrower filtering is done by the caller's `withFileFilter`, as before.
+     */
+    private fun singleFileDescriptor(title: String): FileChooserDescriptor =
+        // (chooseFiles, chooseFolders, chooseJars, chooseJarsAsFiles, chooseJarContents, chooseMultiple)
+        FileChooserDescriptor(true, false, false, false, false, false)
+            .withTitle(title)
 
     /** Open the file dialog where the last book was, so the user is not re-navigating. */
     private fun lastDirectory(): VirtualFile? {

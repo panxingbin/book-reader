@@ -37,7 +37,15 @@ import javax.swing.SwingConstants
  */
 object ReaderStatusBar {
 
-    /** The widget installed in [project]'s status bar, if any. */
+    /**
+     * The widget installed in [project]'s status bar, if any.
+     *
+     * Registration goes through the `statusBarWidgetFactory` extension point
+     * (`BookReaderStatus` in plugin.xml), which is the only supported way to put a
+     * widget in the bar. `StatusBar.addWidget(StatusBarWidget)` is deprecated upstream
+     * ("Use StatusBarWidgetFactory") and is reported by the Marketplace verifier, so
+     * there is deliberately no manual fallback here.
+     */
     fun widgetOf(project: Project): ReaderStatusBarWidget? {
         val bar = WindowManager.getInstance().getStatusBar(project) ?: return null
         return bar.getWidget(ReaderStatusBarWidget.WIDGET_ID) as? ReaderStatusBarWidget
@@ -51,7 +59,7 @@ object ReaderStatusBar {
             val controller = ReaderController.getInstance(project)
             val engine = project.getService(ReadingEngine::class.java)
 
-            val widget = widgetOf(project) ?: ensureWidget(project)
+            val widget = widgetOf(project)
 
             if (!settings.enabled || controller.hidden) {
                 widget?.showIdle(settings.clearText.ifBlank { "—" })
@@ -89,22 +97,6 @@ object ReaderStatusBar {
             // 这里是 no-op，避免同一行正文同时挂在两个界面上。
             ReaderSurface.show(project, ReaderSurface.activeEditor(project), line)
         }
-    }
-
-    /**
-     * Last-resort registration when the platform has not put the widget in the bar.
-     *
-     * `statusBarWidgetFactory` normally does this, but the widget can be missing
-     * (for example when the status-bar layout was saved before the plugin was
-     * installed). `install` is called explicitly so [repaint] has the bar reference
-     * it needs for `updateWidget`.
-     */
-    private fun ensureWidget(project: Project): ReaderStatusBarWidget? {
-        val bar = WindowManager.getInstance().getStatusBar(project) ?: return null
-        val created = ReaderStatusBarWidget(project)
-        created.install(bar)
-        val added = runCatching { bar.addWidget(created) }.isSuccess
-        return if (added) created else null
     }
 
     private fun buildTooltip(project: Project, engine: ReadingEngine): String {
