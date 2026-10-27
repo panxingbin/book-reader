@@ -1,0 +1,322 @@
+<idea-plugin>
+  <id>com.bookreader.reader</id>
+  <name>book-read</name>
+  <version>3.5.0</version>
+  <idea-version since-build="231"/>
+
+  <vendor email="bookreader@example.com" url="https://gitee.com/wind_invade/chapter_reader">BookReader</vendor>
+
+  <description><![CDATA[Book Reader is an IntelliJ IDEA plugin for reading novels online or from local files, with a discreet reading window designed for the IDE.
+    <p><b>小说阅读</b> —— IDEA 上班摸鱼插件，支持在线 &amp; 本地阅读。</p>
+    <p>参考开源项目
+      <a href="https://gitee.com/wind_invade/chapter_reader/">chapter_reader</a> 重做，
+      菜单位置：<b>Tools → Read</b>。</p>
+    <ul>
+      <li>✅ 历史记录自动保存</li>
+      <li>✅ 自定义适配想看的网站</li>
+      <li>✅ 在线章节阅读 —— gitee 配置文件中已配置的网站</li>
+      <li>✅ 在线全章节阅读</li>
+      <li>✅ 本地 txt 章节阅读（自定义章节正则）</li>
+      <li>✅ 本地 txt 全章节阅读</li>
+      <li>✅ 本地 epub 章节阅读</li>
+      <li>✅ 本地 txt 简易阅读</li>
+      <li>✅ 本地 txt 换行符阅读</li>
+    </ul>
+    <p>【普通】阅读模式显示在 IDE 左下角，隐蔽；【全章节】阅读模式显示在右侧 Read 窗口，字体可调。</p>
+  ]]></description>
+
+  <change-notes><![CDATA[
+    <b>3.5.0</b>
+    <ul>
+      <li>修复一键隐藏阅读内容后无法恢复的问题：清屏后阅读位置保留在内存，再次按
+          【有人来了就按我】(Ctrl+Alt+B) 即可恢复阅读，无需「重新初始化」重新加载全书；
+          全章节模式下恢复时 Read 窗口会自动重新打开。快速清屏 (Ctrl+Alt+1) 同样可用
+          Ctrl+Alt+B 恢复。</li>
+      <li>设置里「正文显示样式」下拉框选项改成英文（Status bar / Code hint / Navigation
+          bar），不再显示中文选项；设置入口名改为 <b>Book Reader</b>（Settings → Tools →
+          Book Reader）。</li>
+      <li>修复设置里「正文显示样式」下拉框无法选择的问题：说明文字与下拉框被叠放在同一布局
+          区域，下拉框被挤成 0×0 不可见、不可点。现在两者垂直堆叠，下拉框恢复正常可选。</li>
+      <li>修复「导航栏」显示样式不工作的问题：正文写进的是插件自建实例，而平台渲染的是扩展点
+          自己实例化的另一个实例，文字永远停在占位符上。现在文字存放在所有实例共享的位置，
+          翻页即更新；并且只在「导航栏」样式 + 插件开启 + 有正文时才接管面包屑，其余情况
+          （其他样式、清屏、插件关闭）面包屑完全恢复原样，不再把项目名永远替换成插件名。
+          导航栏正文同时按「导航栏单行最大字数」截断。</li>
+      <li>修复「导航栏 / 代码提示」样式下右下角仍显示「📖 书名 · 已加载」指示的问题：非
+          「状态栏」样式时状态栏现在完全空白——右下角这一行同样会暴露阅读状态，把这两种
+          样式的隐蔽性抵消掉了。仅「状态栏」样式照旧在右下角显示正文。</li>
+    </ul>
+    <b>3.4.0</b>
+    <ul>
+      <li>插件名改为 <b>book-read</b>。</li>
+      <li>设置里「正文显示样式」下拉框改成中文选项，不再显示 BOTTOM_LEFT / CODE_POPUP / NAV_BAR
+          这种代码常量；每个选项下面附一行说明文字。</li>
+      <li>修复正文同时出现在两处的问题：状态栏、编辑器灰条、导航栏三种样式现在是「三选一」——
+          选中哪种样式，正文就只出现在哪个界面，不再重复。</li>
+      <li>修复 IntelliJ 2026.x 上报 NoClassDefFoundError: NavBarPanel 的问题（新版平台已移除该类，
+          现在改为按类名查找组件，找不到时退回普通刷新，不会再崩）。</li>
+      <li>修复 Read 窗口标题行齿轮弹出的功能菜单跑到屏幕左上角的问题。</li>
+    </ul>
+    <b>3.3.0</b>
+    <ul>
+      <li>功能菜单搬到 Read 窗口标题行：标题旁加了一个小齿轮图标，点击即在图标处弹出功能菜单，
+          不必再在面板里找「功能菜单」按钮。</li>
+    </ul>
+    <b>3.2.0</b>
+    <ul>
+      <li>修正正文显示不出来：改回参考项目的实现方式。原插件根本没用状态栏 widget，
+          而是用 HintManager.showInformationHint(editor, text) 在编辑器里画一条灰底提示条
+          ——「左下角」和「代码弹出框」两种样式都是它；「导航栏」样式则走 navbar 扩展点。</li>
+      <li>状态栏改为「已加载」指示器（📖），不再承载正文。</li>
+      <li>新增 navbar 扩展点注册（ReadNavBarExtension / DestructionNavBarExtension），
+          导航栏样式现在真的能用了。</li>
+      <li>快速清屏会同时隐藏 Hint 与导航栏文字。</li>
+    </ul>
+    <b>3.1.1</b>
+    <ul>
+      <li>修复 epub 报「解析章节正文失败：内容为空」：真实 epub 开头的封面页、书名页是纯图片，
+          过去会被当成第 1、2 章，于是阅读从空白页开始就失败了。现在这类无文字页会被跳过。</li>
+      <li>修复 EPUB 3 拿不到目录：epublib 3.1 只有 NCXDocument、没有 NAVDocument，
+          只带 nav.xhtml 的 EPUB 3 书会退化成「第1章/第2章」。现在用 jsoup 补读 nav.xhtml。</li>
+      <li>普通模式起点章节没有正文时，会自动向后找到第一个有正文的章节，而不是直接报错。</li>
+      <li>失败提示带上诊断信息（已检查 x/y 章、跳过几个纯图片页），便于判断原因。</li>
+    </ul>
+    <b>3.1.0</b>
+    <ul>
+      <li>新增【功能菜单】：Read 窗口顶部的按钮，弹出全部分组功能，不必再到 Tools → Read 里找。</li>
+      <li>全章节模式解析时显示进度（第 x/y 章），并且现在真的可以取消。</li>
+      <li>修复自动下一页反复开关后会同时触发多次翻页的问题。</li>
+      <li>修复长篇小说按需加载章节时的 O(n²) 行拷贝。</li>
+      <li>内容过滤 / 章节正则改为缓存编译结果，不再每次重新编译。</li>
+      <li>在线站点配置缓存移出 IDE 设置文件（原先把 798 KB JSON 塞进 book-reader.xml）。</li>
+      <li>版本号单一来源：gradle.properties 的 pluginVersion，构建时会校验 plugin.xml 是否同步。</li>
+    </ul>
+    <b>3.0.6</b>
+    <ul>
+      <li>按参考项目 chapter_reader 3.0.6 重做：Tools → Read 菜单、普通/全章节两种阅读面。</li>
+      <li>在线阅读：gitee 站点配置 + 本地缓存、正常网站列表、网站节点调试、保存网站到本地。</li>
+      <li>本地阅读：txt 章节正则、epub、简易文章、简易文本四种模式。</li>
+      <li>控制：上一页/下一页/自动下一页、章节跳转、内容跳转、字体选择、内容过滤、历史记录、快速清屏。</li>
+    </ul>
+  ]]></change-notes>
+
+  <depends>com.intellij.modules.platform</depends>
+
+  <extensions defaultExtensionNs="com.intellij">
+    <!-- Restores the last local book and keeps the status bar subscribed. -->
+    <postStartupActivity implementation="com.bookreader.reader.ReaderStartupActivity" order="last"/>
+
+    <!-- 全章节阅读模式 -->
+    <toolWindow id="Read"
+                anchor="right"
+                icon="/icons/bookReader.svg"
+                factoryClass="com.bookreader.reader.ui.ReadToolWindowFactory"
+                doNotActivateOnStart="false"/>
+
+    <!-- 状态栏只做「已加载」指示；正文显示在 Hint / 弹出框 / 导航栏 -->
+    <statusBarWidgetFactory id="BookReaderStatus"
+                            implementation="com.bookreader.reader.ui.ReaderStatusBarWidgetFactory"
+                            order="after positionPanel"/>
+
+    <!-- 导航栏显示样式：照参考项目用 navbar 扩展点把正文渲染进导航栏 -->
+    <navbar id="BookReaderNavBar"
+            implementation="com.bookreader.reader.ui.ReadNavBarExtension"
+            order="first"/>
+    <navbar id="BookReaderDestructionNavBar"
+            implementation="com.bookreader.reader.ui.DestructionNavBarExtension"
+            order="after BookReaderNavBar"/>
+
+    <!-- Progress goes to the Notifications/Event Log window only, never a balloon. -->
+    <notificationGroup id="chapter.reader.novel" displayType="NONE"/>
+
+    <applicationConfigurable parentId="tools"
+                             instance="com.bookreader.reader.settings.ReaderSettingsPage"
+                             id="com.bookreader.reader.settings"
+                             displayName="Book Reader"/>
+  </extensions>
+
+  <actions>
+    <!-- 顶部菜单栏 Tools → Read -->
+    <group id="ReadMenu" text="_Read" description="小说阅读" popup="true" icon="/icons/bookReader.svg">
+      <add-to-group group-id="ToolsMenu" anchor="last"/>
+    </group>
+
+    <!-- 插件设置 / 帮助 -->
+    <group id="ReadMenu.Plugin" text="插件设置" popup="true">
+      <action id="BookReader.Settings"
+              class="com.bookreader.reader.actions.SettingsAction"
+              text="插件设置"
+              description="打开 Book Reader 的设置页"
+              icon="AllIcons.General.Settings">
+        <keyboard-shortcut keymap="$default" first-keystroke="control alt C"/>
+      </action>
+      <action id="BookReader.Help"
+              class="com.bookreader.reader.actions.HelpAction"
+              text="使用说明 / 帮助"
+              description="查看全部菜单的使用说明"
+              icon="AllIcons.Actions.Help"/>
+      <add-to-group group-id="ReadMenu" anchor="first"/>
+      <separator/>
+    </group>
+
+    <!-- 在线阅读 -->
+    <group id="ReadMenu.Remote" text="在线阅读" popup="true">
+      <action id="BookReader.Remote.Read"
+              class="com.bookreader.reader.actions.RemoteReadAction"
+              text="在线阅读模式"
+              description="输入小说章节目录 URL，在状态栏阅读"
+              icon="/icons/bookReader.svg">
+        <keyboard-shortcut keymap="$default" first-keystroke="control alt G"/>
+      </action>
+      <action id="BookReader.Remote.ReadFull"
+              class="com.bookreader.reader.actions.RemoteReadFullAction"
+              text="在线全章节阅读模式"
+              description="输入小说章节目录 URL，在 Read 窗口整章阅读">
+        <keyboard-shortcut keymap="$default" first-keystroke="control alt shift G"/>
+      </action>
+      <action id="BookReader.Remote.DomainList"
+              class="com.bookreader.reader.actions.DomainListAction"
+              text="正常网站列表"
+              description="查看 gitee 上已配置且可用的网站">
+        <keyboard-shortcut keymap="$default" first-keystroke="control alt D"/>
+      </action>
+      <action id="BookReader.Remote.Debug"
+              class="com.bookreader.reader.actions.RemoteDebugAction"
+              text="网站节点调试"
+              description="调试 chapterPath / contentPath，一键复制配置提交 gitee">
+        <keyboard-shortcut keymap="$default" first-keystroke="control alt shift R"/>
+      </action>
+      <action id="BookReader.Remote.SaveHtml"
+              class="com.bookreader.reader.actions.SaveHtmlAction"
+              text="保存网站到本地"
+              description="把网页保存到本地，便于获取动态节点的 FullPath"/>
+      <add-to-group group-id="ReadMenu" anchor="last"/>
+      <separator/>
+    </group>
+
+    <!-- 本地阅读 -->
+    <group id="ReadMenu.Local" text="本地阅读" popup="true">
+      <action id="BookReader.Local.Read"
+              class="com.bookreader.reader.actions.LocalReadAction"
+              text="本地阅读模式"
+              description="选择 txt 文件与章节正则，在状态栏阅读"
+              icon="/icons/bookReader.svg">
+        <keyboard-shortcut keymap="$default" first-keystroke="control alt F"/>
+      </action>
+      <action id="BookReader.Local.ReadFull"
+              class="com.bookreader.reader.actions.LocalReadFullAction"
+              text="本地全章节阅读模式"
+              description="选择 txt 文件与章节正则，在 Read 窗口整章阅读">
+        <keyboard-shortcut keymap="$default" first-keystroke="control alt shift F"/>
+      </action>
+      <action id="BookReader.Local.Epub"
+              class="com.bookreader.reader.actions.EpubReadAction"
+              text="Epub阅读模式"
+              description="选择 epub 文件，在状态栏阅读"/>
+      <action id="BookReader.Local.EpubFull"
+              class="com.bookreader.reader.actions.EpubReadFullAction"
+              text="Epub全章节阅读模式"
+              description="选择 epub 文件，在 Read 窗口整章阅读"/>
+      <action id="BookReader.Local.SimpleArticle"
+              class="com.bookreader.reader.actions.SimpleArticleReadAction"
+              text="简易文章阅读模式"
+              description="仅按单行展示最大字数切分内容"/>
+      <action id="BookReader.Local.SimpleText"
+              class="com.bookreader.reader.actions.SimpleTextReadAction"
+              text="简易文本阅读模式"
+              description="仅按文件换行符分行"/>
+      <add-to-group group-id="ReadMenu" anchor="last"/>
+      <separator/>
+    </group>
+
+    <!-- 控制 -->
+    <group id="ReadMenu.Control" text="控制" popup="true">
+      <action id="BookReader.Control.BossKey"
+              class="com.bookreader.reader.actions.BossKeyAction"
+              text="有人来了就按我"
+              description="隐藏阅读内容，再次按下即恢复（不重新加载）"
+              icon="AllIcons.General.HideToolWindow">
+        <keyboard-shortcut keymap="$default" first-keystroke="control alt B"/>
+      </action>
+      <action id="BookReader.Control.Swipe"
+              class="com.bookreader.reader.actions.SwipeAction"
+              text="快速清屏"
+              description="一键清屏，立即隐藏阅读内容（Ctrl+Alt+B 可恢复）">
+        <keyboard-shortcut keymap="$default" first-keystroke="control alt 1"/>
+      </action>
+      <action id="BookReader.Control.Restart"
+              class="com.bookreader.reader.actions.RestartAction"
+              text="重新初始化"
+              description="重新解析当前书籍">
+        <keyboard-shortcut keymap="$default" first-keystroke="control alt R"/>
+      </action>
+      <action id="BookReader.Control.ToolWindow"
+              class="com.bookreader.reader.actions.ToolWindowAction"
+              text="Read窗口切换至本项目"
+              description="显示右侧 Read 工具窗口">
+        <keyboard-shortcut keymap="$default" first-keystroke="control alt W"/>
+      </action>
+      <action id="BookReader.Control.Convert"
+              class="com.bookreader.reader.actions.ConvertReadModeAction"
+              text="普通阅读与全章节阅读转换"
+              description="在状态栏阅读与 Read 窗口阅读之间切换">
+        <keyboard-shortcut keymap="$default" first-keystroke="control alt Z"/>
+      </action>
+      <action id="BookReader.Control.Filter"
+              class="com.bookreader.reader.actions.TextFilterAction"
+              text="内容过滤"
+              description="按正则丢弃正文中的广告行">
+        <keyboard-shortcut keymap="$default" first-keystroke="control alt T"/>
+      </action>
+      <action id="BookReader.Control.History"
+              class="com.bookreader.reader.actions.HistoryAction"
+              text="历史记录"
+              description="查看并恢复最近的阅读记录">
+        <keyboard-shortcut keymap="$default" first-keystroke="control alt H"/>
+      </action>
+      <action id="BookReader.Control.Font"
+              class="com.bookreader.reader.actions.FontAction"
+              text="字体选择"
+              description="设置 Read 窗口的字体、字号与颜色"/>
+      <action id="BookReader.Control.JumpChapter"
+              class="com.bookreader.reader.actions.JumpChapterAction"
+              text="章节列表 / 跳转"
+              description="按名称筛选并跳转章节">
+        <keyboard-shortcut keymap="$default" first-keystroke="control alt J"/>
+      </action>
+      <action id="BookReader.Control.JumpContent"
+              class="com.bookreader.reader.actions.JumpContentAction"
+              text="内容跳转"
+              description="跳转到指定行号"/>
+      <action id="BookReader.Control.Prev"
+              class="com.bookreader.reader.actions.PreviousPageAction"
+              text="上一页"
+              description="上一页"
+              icon="AllIcons.Actions.Back">
+        <keyboard-shortcut keymap="$default" first-keystroke="control alt 2"/>
+      </action>
+      <action id="BookReader.Control.Next"
+              class="com.bookreader.reader.actions.NextPageAction"
+              text="下一页"
+              description="下一页"
+              icon="AllIcons.Actions.Forward">
+        <keyboard-shortcut keymap="$default" first-keystroke="control alt 3"/>
+      </action>
+      <action id="BookReader.Control.AutoNext"
+              class="com.bookreader.reader.actions.AutoNextPageAction"
+              text="自动下一页【再次按下则停止】"
+              description="按固定间隔自动翻页，再次按下停止">
+        <keyboard-shortcut keymap="$default" first-keystroke="control alt 4"/>
+      </action>
+      <add-to-group group-id="ReadMenu" anchor="last"/>
+      <separator/>
+    </group>
+
+    <action id="BookReader.Support"
+            class="com.bookreader.reader.actions.SupportAction"
+            text="赞助一下~ 鼓励持续更新~"
+            description="关于本插件与原项目">
+      <add-to-group group-id="ReadMenu" anchor="last"/>
+    </action>
+  </actions>
+</idea-plugin>

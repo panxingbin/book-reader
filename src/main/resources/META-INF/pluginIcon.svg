@@ -1,0 +1,22 @@
+<svg width="40" height="40" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
+  <!-- left page -->
+  <path d="M19 8 L5 8 L5 35 L19 35 Z" fill="#F5F5F5" stroke="#9AA0A6" stroke-width="1.5"
+        stroke-linejoin="round"/>
+  <!-- right page -->
+  <path d="M21 8 L35 8 L35 35 L21 35 Z" fill="#F5F5F5" stroke="#9AA0A6" stroke-width="1.5"
+        stroke-linejoin="round"/>
+  <!-- spine -->
+  <line x1="20" y1="8" x2="20" y2="35" stroke="#9AA0A6" stroke-width="1.5"/>
+  <!-- bookmark ribbon on the right page, clear of the spine -->
+  <path d="M28 8 L28 18 L26 16 L24 18 L24 8 Z" fill="#4078F2"/>
+  <!-- left page text lines -->
+  <line x1="8" y1="15" x2="16" y2="15" stroke="#C4C7C5" stroke-width="1.2"/>
+  <line x1="8" y1="19" x2="16" y2="19" stroke="#C4C7C5" stroke-width="1.2"/>
+  <line x1="8" y1="23" x2="16" y2="23" stroke="#C4C7C5" stroke-width="1.2"/>
+  <line x1="8" y1="27" x2="13" y2="27" stroke="#C4C7C5" stroke-width="1.2"/>
+  <line x1="8" y1="31" x2="16" y2="31" stroke="#C4C7C5" stroke-width="1.2"/>
+  <!-- right page text lines (start below the ribbon) -->
+  <line x1="24" y1="23" x2="32" y2="23" stroke="#C4C7C5" stroke-width="1.2"/>
+  <line x1="24" y1="27" x2="32" y2="27" stroke="#C4C7C5" stroke-width="1.2"/>
+  <line x1="24" y1="31" x2="29" y2="31" stroke="#C4C7C5" stroke-width="1.2"/>
+</svg>
