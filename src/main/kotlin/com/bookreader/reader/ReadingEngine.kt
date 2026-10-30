@@ -309,20 +309,29 @@ class ReadingEngine(private val project: Project) {
 
         val chapter = currentChapter()
         val chapterStart = if (chapter >= 0) book.lineOfChapter(chapter).coerceAtLeast(0) else 0
+        val lineInChapter = (position - chapterStart).coerceAtLeast(0)
+        val path = sourcePathOf(book)
 
         ReadingState.getInstance(project).remember(
             mode = mode,
-            path = sourcePathOf(book),
+            path = path,
             chapterIndex = chapter,
-            lineInChapter = (position - chapterStart).coerceAtLeast(0),
+            lineInChapter = lineInChapter,
             lineIndex = position,
             whole = book.wholeBook,
             list = book.chapters,
         )
+
+        // The application-level snapshot: a window opened later resumes this
+        // book at this position, while this window keeps its own progress in
+        // ReadingState above (each window's progress stays independent).
+        BookLibrary.instance().rememberBook(mode.name, path, chapter, lineInChapter, position)
     }
 
     private fun sourcePathOf(book: BookContent): String =
-        book.chapters.firstOrNull()?.url?.takeIf { it.isNotBlank() } ?: book.title
+        book.source.takeIf { it.isNotBlank() }
+            ?: book.chapters.firstOrNull()?.url?.takeIf { it.isNotBlank() }
+            ?: book.title
 
     fun clear() {
         content = null

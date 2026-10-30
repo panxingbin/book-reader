@@ -136,6 +136,17 @@ class ReaderStatusBarWidget(private val project: Project) :
     private var popup: JBPopup? = null
 
     /**
+     * When the popup last cancelled itself.
+     *
+     * A focusable popup is cancelled on the **mouse press** of a click outside it
+     * (the status-bar widget included) and the click is still delivered to
+     * [getClickConsumer] afterwards, so without this timestamp the second click
+     * would reopen the popup instead of closing it.
+     */
+    @Volatile
+    private var popupCancelledAt: Long = 0L
+
+    /**
      * The status bar we were installed into, kept from [install].
      *
      * Writing [text] alone changes nothing on screen: the platform only re-reads
@@ -223,6 +234,9 @@ class ReaderStatusBarWidget(private val project: Project) :
             popup = null
             return
         }
+        // The click that got here already dismissed the popup: it is a close,
+        // not a request to open it again.
+        if (System.currentTimeMillis() - popupCancelledAt < CLICK_GRACE_MS) return
         showPopup(point)
     }
 
@@ -240,6 +254,7 @@ class ReaderStatusBarWidget(private val project: Project) :
             .setCancelOnClickOutside(true)
             .setCancelOnOtherWindowOpen(true)
             .setCancelCallback {
+                popupCancelledAt = System.currentTimeMillis()
                 popup = null
                 true
             }
@@ -251,6 +266,9 @@ class ReaderStatusBarWidget(private val project: Project) :
 
     companion object {
         const val WIDGET_ID = "BookReaderStatus"
+
+        /** Grace window for "this click closed the popup" — see [popupCancelledAt]. */
+        private const val CLICK_GRACE_MS = 300L
     }
 }
 

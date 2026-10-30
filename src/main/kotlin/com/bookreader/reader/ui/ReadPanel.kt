@@ -74,6 +74,13 @@ class ReadPanel(private val project: Project) : JPanel(BorderLayout()) {
     )
 
     init {
+        // Must be focusable: the platform decides "is this tool window active?"
+        // from the focused component, and the stripe icon only hides a window
+        // that is active. A plain JPanel is not focusable, and in the empty state
+        // it contains nothing focusable either — so the Read window could never
+        // become active and clicking its stripe icon a second time did nothing.
+        isFocusable = true
+
         add(buildHeader(), BorderLayout.NORTH)
         add(buildBody(), BorderLayout.CENTER)
 
@@ -90,6 +97,13 @@ class ReadPanel(private val project: Project) : JPanel(BorderLayout()) {
         // see ReadToolWindowFactory.setTitleActions); only the quick 清屏 button
         // stays in the panel.
         val menuRow = JPanel(FlowLayout(FlowLayout.LEFT, 4, 4)).apply {
+            add(
+                JButton("选择书籍", AllIcons.Actions.MenuOpen).apply {
+                    toolTipText = "从书籍目录中选择一本书（Ctrl+Alt+O）"
+                    isFocusable = false
+                    addActionListener { controller.openBookPicker() }
+                },
+            )
             add(
                 JButton("隐藏阅读内容", AllIcons.General.HideToolWindow).apply {
                     toolTipText = "一键清屏（Ctrl+Alt+B 再按可恢复）"

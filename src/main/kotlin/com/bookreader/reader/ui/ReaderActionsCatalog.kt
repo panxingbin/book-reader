@@ -4,7 +4,7 @@ import com.intellij.icons.AllIcons
 import javax.swing.Icon
 
 /**
- * Display metadata for the sidebar's **功能菜单** panel.
+ * Display metadata for the 功能菜单 dialog.
  *
  * The panel is not a second copy of the menu: every row invokes the *same* action
  * id that [com.bookreader.reader.actions.ReaderActions] registers in
@@ -71,19 +71,23 @@ object ReaderActionsCatalog {
             title = "本地阅读",
             rows = listOf(
                 Row(
-                    "BookReader.Local.Read", "本地阅读模式", "选择 txt 与章节正则，在状态栏阅读",
+                    "BookReader.Local.OpenBook", "打开书籍…", "选目录列书 + 选择阅读方式，一个入口开始读",
+                    "Ctrl+Alt+O", AllIcons.Actions.MenuOpen,
+                ),
+                Row(
+                    "BookReader.Local.Read", "本地阅读模式", "选目录列文件（txt）+ 章节正则，在状态栏阅读",
                     "Ctrl+Alt+F", AllIcons.Actions.Download,
                 ),
                 Row(
-                    "BookReader.Local.ReadFull", "本地全章节阅读模式", "选择 txt 与章节正则，在 Read 窗口整本阅读",
+                    "BookReader.Local.ReadFull", "本地全章节阅读模式", "选目录列文件（txt）+ 章节正则，在 Read 窗口阅读",
                     "Ctrl+Alt+Shift+F", AllIcons.Actions.EditSource,
                 ),
                 Row(
-                    "BookReader.Local.Epub", "Epub阅读模式", "选择 epub 文件，在状态栏阅读",
+                    "BookReader.Local.Epub", "Epub阅读模式", "选目录列文件（epub），在状态栏阅读",
                     "", AllIcons.Actions.Download,
                 ),
                 Row(
-                    "BookReader.Local.EpubFull", "Epub全章节阅读模式", "选择 epub 文件，在 Read 窗口整本阅读",
+                    "BookReader.Local.EpubFull", "Epub全章节阅读模式", "选目录列文件（epub），在 Read 窗口阅读",
                     "", AllIcons.Actions.EditSource,
                 ),
                 Row(
@@ -112,7 +116,7 @@ object ReaderActionsCatalog {
                     "Ctrl+Alt+R", AllIcons.Actions.Refresh,
                 ),
                 Row(
-                    "BookReader.Control.ToolWindow", "Read窗口切换至本项目", "显示右侧 Read 工具窗口",
+                    "BookReader.Control.ToolWindow", "Read窗口切换至本项目", "显示 / 收起右侧 Read 工具窗口",
                     "Ctrl+Alt+W", AllIcons.Actions.Show,
                 ),
                 Row(
@@ -124,7 +128,7 @@ object ReaderActionsCatalog {
                     "Ctrl+Alt+T", AllIcons.General.Filter,
                 ),
                 Row(
-                    "BookReader.Control.History", "历史记录", "查看并恢复最近的阅读记录",
+                    "BookReader.Control.History", "历史记录", "查看并恢复最近的阅读记录（所有窗口共享）",
                     "Ctrl+Alt+H", AllIcons.Vcs.History,
                 ),
                 Row(

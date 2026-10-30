@@ -1,12 +1,11 @@
 package com.bookreader.reader.ui.dialogs
 
+import com.bookreader.reader.BookLibrary
 import com.bookreader.reader.HistoryEntry
 import com.bookreader.reader.ReaderController
 import com.bookreader.reader.ReaderMode
-import com.bookreader.reader.ReadingState
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogWrapper
-import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBList
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.util.ui.JBUI
@@ -26,12 +25,15 @@ import javax.swing.ListSelectionModel
 /**
  * 历史记录 — every book read recently, newest first.
  *
- * A row carries enough to resume without re-parsing: the mode, the source, and
- * how big the book was when it was last opened. Double-click resumes it.
+ * Backed by the application-level [BookLibrary], so the list is the same in
+ * every IDE window (it used to be per project, which is why a new window showed
+ * an empty history). A row carries enough to resume without re-parsing: the
+ * mode, the source, and how big the book was when it was last opened.
+ * Double-click resumes it.
  */
 class HistoryDialog(private val project: Project) : DialogWrapper(project) {
 
-    private val state = ReadingState.getInstance(project)
+    private val library = BookLibrary.instance()
     private val model = DefaultListModel<Any>()
     private val list = JBList(model)
 
@@ -56,7 +58,7 @@ class HistoryDialog(private val project: Project) : DialogWrapper(project) {
         buttons.add(JButton("删除").apply { addActionListener { removeSelected() } })
         buttons.add(JButton("清空").apply {
             addActionListener {
-                state.clearHistory()
+                library.clearHistory()
                 reload()
             }
         })
@@ -70,7 +72,7 @@ class HistoryDialog(private val project: Project) : DialogWrapper(project) {
 
     private fun reload() {
         model.clear()
-        val history = state.history()
+        val history = library.history()
         if (history.isEmpty()) {
             model.addElement(EMPTY_HINT)
         } else {
@@ -89,7 +91,7 @@ class HistoryDialog(private val project: Project) : DialogWrapper(project) {
 
     private fun removeSelected() {
         val entry = selectedEntry() ?: return
-        state.removeHistory(entry)
+        library.removeHistory(entry)
         reload()
     }
 
@@ -103,20 +105,23 @@ class HistoryDialog(private val project: Project) : DialogWrapper(project) {
             selected: Boolean,
             focus: Boolean,
         ): Component {
-            val label = super.getListCellRendererComponent(list, value, index, selected, focus) as JBLabel
+            // `super` returns **this** instance (a DefaultListCellRenderer, i.e. a
+            // plain JLabel); casting it to JBLabel throws ClassCastException, so
+            // configure `this` directly.
+            super.getListCellRendererComponent(list, value, index, selected, focus)
             val entry = value as? HistoryEntry
             if (entry == null) {
-                label.text = "还没有阅读记录。菜单：Tools → Read"
-                label.border = JBUI.Borders.empty(6)
-                return label
+                text = "还没有阅读记录。菜单：Tools → Read（历史记录在所有窗口中共享）"
+                border = JBUI.Borders.empty(6)
+                return this
             }
             val mode = ReaderMode.byNameOrNull(entry.modeName)?.title ?: entry.modeName
-            label.text = "<html><b>${escape(entry.title)}</b><br>" +
+            text = "<html><b>${escape(entry.title)}</b><br>" +
                 "<font color='gray'>$mode · 章节数【${entry.chapterCount}】 · 内容行数【${entry.lineCount}】 · " +
                 "读到 ${entry.position + 1} 行 · ${format.format(Date(entry.visitedAt))}</font><br>" +
                 "<font color='gray'>${escape(entry.path)}</font></html>"
-            label.border = JBUI.Borders.empty(4, 6)
-            return label
+            border = JBUI.Borders.empty(4, 6)
+            return this
         }
 
         private fun escape(text: String): String =

@@ -1,10 +1,10 @@
 package com.bookreader.reader.actions
 
+import com.bookreader.reader.BookLibrary
 import com.bookreader.reader.ReaderController
 import com.bookreader.reader.ReaderLog
 import com.bookreader.reader.ReaderMode
 import com.bookreader.reader.ReadingEngine
-import com.bookreader.reader.ReadingState
 import com.bookreader.reader.remote.Http
 import com.bookreader.reader.ui.dialogs.ChapterListDialog
 import com.bookreader.reader.ui.dialogs.ContentFilterDialog
@@ -77,6 +77,18 @@ class SimpleArticleReadAction : ReaderModeAction(ReaderMode.SIMPLE_ARTICLE)
 
 /** 简易文本阅读模式. */
 class SimpleTextReadAction : ReaderModeAction(ReaderMode.SIMPLE_TEXT)
+
+/**
+ * 打开书籍 — pick a book from the shared directory.
+ *
+ * Unlike the per-mode entries, the dialog offers a 阅读方式 combo, so this is the
+ * one obvious entry point once a 书籍目录 has been set (Settings → Book Reader).
+ */
+class OpenBookAction : ReaderAction() {
+    override fun perform(project: com.intellij.openapi.project.Project, controller: ReaderController) {
+        controller.openBookPicker()
+    }
+}
 
 // ---------------------------------------------------------------------------
 // 在线阅读工具
@@ -233,10 +245,10 @@ class RestartAction : ReaderAction() {
     }
 }
 
-/** Read窗口切换至本项目. */
+/** Read窗口切换至本项目 — 再按一次收起（与右侧侧边栏图标一致）. */
 class ToolWindowAction : ReaderAction() {
     override fun perform(project: com.intellij.openapi.project.Project, controller: ReaderController) {
-        controller.activateReadWindow()
+        controller.toggleReadWindow()
     }
 }
 
@@ -292,8 +304,8 @@ class HistoryAction : ReaderAction() {
     }
 
     override fun update(event: AnActionEvent) {
-        val project = event.project ?: return
-        event.presentation.isEnabled = ReadingState.getInstance(project).history().isNotEmpty()
+        if (event.project == null) return
+        event.presentation.isEnabled = BookLibrary.instance().history().isNotEmpty()
     }
 }
 

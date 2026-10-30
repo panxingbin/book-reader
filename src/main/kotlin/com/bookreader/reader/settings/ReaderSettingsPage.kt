@@ -1,11 +1,15 @@
 package com.bookreader.reader.settings
 
+import com.bookreader.reader.BookLibrary
 import com.bookreader.reader.ReaderController
 import com.bookreader.reader.ReaderSettings
+import com.intellij.openapi.fileChooser.FileChooser
+import com.intellij.openapi.fileChooser.FileChooserDescriptor
 import com.intellij.openapi.ide.CopyPasteManager
 import com.intellij.openapi.options.Configurable
 import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.ui.Messages
+import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBScrollPane
@@ -17,6 +21,7 @@ import java.awt.Font
 import java.awt.GridBagConstraints
 import java.awt.GridBagLayout
 import java.awt.Insets
+import java.io.File
 import javax.swing.BoxLayout
 import javax.swing.JButton
 import javax.swing.JCheckBox
@@ -60,6 +65,7 @@ class ReaderSettingsPage : Configurable {
     private lateinit var autoNextField: JTextField
     private lateinit var configUrlField: JTextField
     private lateinit var cacheStatusLabel: JBLabel
+    private lateinit var bookDirectoryField: JTextField
 
     override fun getDisplayName(): String = "Book Reader"
 
@@ -110,6 +116,10 @@ class ReaderSettingsPage : Configurable {
         autoNextField = JTextField(s.autoNextSeconds.toString(), 6)
         configUrlField = JTextField(s.remoteConfigUrl, 40)
         cacheStatusLabel = JBLabel(cacheDescription())
+        bookDirectoryField = JTextField(BookLibrary.instance().bookDirectory, 34).apply {
+            isEditable = false
+            toolTipText = "所有 IDEA 窗口共用这个目录；本地阅读选书时从这里开始"
+        }
 
         installListeners(s)
 
@@ -169,6 +179,9 @@ class ReaderSettingsPage : Configurable {
         field("设置清屏文本：", clearTextField)
         field("远程读取超时时间(x/秒)：", timeoutField)
 
+        section("书籍目录")
+        field("所有窗口共享的书籍目录：", buildBookDirectoryPanel())
+
         section("阅读")
         field("全章节每页行数：", linesPerPageField)
         field("自动下一页间隔(x/秒)：", autoNextField)
@@ -191,6 +204,58 @@ class ReaderSettingsPage : Configurable {
         val scroll = JBScrollPane(form)
         scroll.preferredSize = Dimension(JBUI.scale(620), JBUI.scale(560))
         return scroll
+    }
+
+    /**
+     * 书籍目录 — one folder for every window.
+     *
+     * The book picker remembers the directory automatically; this row exists so
+     * it can also be set (or cleared) from one place without opening a book
+     * first, and so it is obvious that the setting is not per project.
+     */
+    private fun buildBookDirectoryPanel(): JComponent {
+        val row = JPanel(BorderLayout(6, 0))
+        row.add(bookDirectoryField, BorderLayout.CENTER)
+
+        val buttons = JPanel()
+        buttons.add(JButton("选择目录…").apply { addActionListener { chooseBookDirectory() } })
+        buttons.add(JButton("清空").apply {
+            addActionListener {
+                BookLibrary.instance().rememberDirectory("")
+                bookDirectoryField.text = ""
+            }
+        })
+        row.add(buttons, BorderLayout.EAST)
+
+        // The directory is only the starting point — the book list is shown by
+        // 打开书籍, so say so right here instead of leaving the row to look like
+        // "this is where you pick a book".
+        val hint = JBLabel(
+            "选书入口：Tools → Read → 打开书籍…（Ctrl+Alt+O），或任一本地阅读模式；" +
+                "对话框会列出此目录下的书籍，双击即读。",
+        ).apply {
+            foreground = JBColor.GRAY
+            border = JBUI.Borders.emptyTop(2)
+        }
+
+        val panel = JPanel(BorderLayout(0, 2))
+        panel.add(row, BorderLayout.NORTH)
+        panel.add(hint, BorderLayout.CENTER)
+        return panel
+    }
+
+    private fun chooseBookDirectory() {
+        val descriptor = FileChooserDescriptor(false, true, false, false, false, false)
+            .withTitle("选择书籍目录")
+        val current = BookLibrary.instance().bookDirectory
+            .takeIf { it.isNotBlank() }
+            ?.let { LocalFileSystem.getInstance().refreshAndFindFileByPath(it) }
+        val chosen = FileChooser.chooseFile(descriptor, null, current) ?: return
+        val directory = File(chosen.path)
+        if (!directory.isDirectory) return
+
+        BookLibrary.instance().rememberDirectory(directory.absolutePath)
+        bookDirectoryField.text = directory.absolutePath
     }
 
     /**
@@ -342,6 +407,7 @@ class ReaderSettingsPage : Configurable {
         linesPerPageField.text = s.linesPerPage.toString()
         autoNextField.text = s.autoNextSeconds.toString()
         configUrlField.text = s.remoteConfigUrl
+        bookDirectoryField.text = BookLibrary.instance().bookDirectory
         refreshCacheStatus()
         changed = false
     }

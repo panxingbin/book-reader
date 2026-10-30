@@ -75,7 +75,7 @@ object BookLoader {
                 epub(mode, source, settings, startChapter, startLine, cancelled, progress)
 
             ReaderMode.SIMPLE_ARTICLE, ReaderMode.SIMPLE_TEXT ->
-                simple(mode, source, settings)
+                simple(mode, source, settings, startLine)
         }
     }
 
@@ -118,7 +118,7 @@ object BookLoader {
         }
 
         return finish(
-            mode, title, catalog.chapters, provider, startChapter, startLine, cancelled, progress,
+            mode, title, catalog.chapters, provider, startChapter, startLine, cancelled, progress, source = url,
         ) { examined, total ->
             "解析章节正文失败：根据 contentPath 获取内容为空。" +
                 "已检查 $examined/$total 章，全部为空 —— 请检查网站内容是否正常显示，" +
@@ -160,7 +160,7 @@ object BookLoader {
             LocalChapterSplitter.chapterBody(text, chapters, index).takeIf { it.isNotBlank() }
         }
 
-        return finish(mode, title, chapters, provider, startChapter, startLine, cancelled, progress) { examined, total ->
+        return finish(mode, title, chapters, provider, startChapter, startLine, cancelled, progress, source = path) { examined, total ->
             "解析章节正文失败：内容为空（已检查 $examined/$total 章）。" +
                 "1、检查文件编码是否为 UTF-8 ｜ 2、检查章节正则 ${settings.chapterRegex} 是否匹配标题。"
         }
@@ -182,7 +182,7 @@ object BookLoader {
 
         val provider = ReadingEngine.ChapterTextProvider { index -> book.content(index).takeIf { it.isNotBlank() } }
 
-        return finish(mode, book.title, book.chapters, provider, startChapter, startLine, cancelled, progress) { examined, total ->
+        return finish(mode, book.title, book.chapters, provider, startChapter, startLine, cancelled, progress, source = path) { examined, total ->
             "该 epub 里没有可提取的文字：$total 个章节中已检查 $examined 个，全部为空。" +
                 "另有 ${book.skipped} 个纯图片页（封面/书名页等）已跳过。" +
                 "如果这是扫描版（整本都是图片），本插件无法阅读。"
@@ -211,12 +211,13 @@ object BookLoader {
         startLine: Int,
         cancelled: () -> Boolean,
         progress: Progress,
+        source: String,
         noTextMessage: (examined: Int, total: Int) -> String,
     ): Result {
         val from = startChapter.coerceIn(0, chapters.size - 1)
 
         if (mode.isFullChapter) {
-            val book = buildWholeBook(mode, title, chapters, provider, cancelled, progress)
+            val book = buildWholeBook(mode, title, chapters, provider, cancelled, progress, source)
                 ?: return Result.Cancelled
             if (book.lines.isEmpty()) return Result.Failure(noTextMessage(chapters.size, chapters.size))
             return Result.Ok(book, positionIn(book, from, startLine), provider)
@@ -229,7 +230,7 @@ object BookLoader {
 
             val lines = readChapter(provider, index) ?: continue
             val starts = IntArray(chapters.size) { if (it == index) 0 else -1 }
-            val book = BookContent(title, mode, chapters, lines, starts, wholeBook = false)
+            val book = BookContent(title, mode, chapters, lines, starts, wholeBook = false, source = source)
 
             if (index != from) {
                 ReaderLog.load("第 ${from + 1} 章没有正文，已从第 ${index + 1} 章开始阅读。")
@@ -244,7 +245,7 @@ object BookLoader {
 
     // ---- simple modes ------------------------------------------------------
 
-    private fun simple(mode: ReaderMode, path: String, settings: ReaderSettings): Result {
+    private fun simple(mode: ReaderMode, path: String, settings: ReaderSettings, startLine: Int): Result {
         val file = File(path)
         if (!file.isFile) return Result.Failure("文件不存在：$path")
 
@@ -266,9 +267,12 @@ object BookLoader {
 
         ReaderLog.load("分割数据结束，共 ${lines.size} 行")
         val book = BookContent(
-            file.nameWithoutExtension, mode, emptyList(), ArrayList(lines), IntArray(0), wholeBook = true,
+            file.nameWithoutExtension, mode, emptyList(), ArrayList(lines), IntArray(0),
+            wholeBook = true, source = path,
         )
-        return Result.Ok(book, startLine = 0, provider = null)
+        // 简易 modes have no chapters, so `startLine` is already absolute; honour
+        // it so 历史记录 / reopening the IDE resumes where the user stopped.
+        return Result.Ok(book, startLine = startLine.coerceIn(0, (lines.size - 1).coerceAtLeast(0)), provider = null)
     }
 
     // ---- shared ------------------------------------------------------------
@@ -302,6 +306,7 @@ object BookLoader {
         provider: ReadingEngine.ChapterTextProvider,
         cancelled: () -> Boolean,
         progress: Progress,
+        source: String,
     ): BookContent? {
         val lines = ArrayList<String>()
         val starts = IntArray(chapters.size)
@@ -329,6 +334,6 @@ object BookLoader {
 
         if (failures > 0) ReaderLog.load("有 $failures 章内容为空，已跳过。")
         ReaderLog.load("全章节解析完成，共 ${lines.size} 行")
-        return BookContent(title, mode, chapters, lines, starts, wholeBook = true)
+        return BookContent(title, mode, chapters, lines, starts, wholeBook = true, source = source)
     }
 }

@@ -1,7 +1,7 @@
 <idea-plugin>
   <id>com.bookreader.reader</id>
   <name>book-read</name>
-  <version>3.5.4</version>
+  <version>3.6.4</version>
   <idea-version since-build="231"/>
 
   <vendor email="bookreader@example.com" url="https://gitee.com/wind_invade/chapter_reader">BookReader</vendor>
@@ -12,7 +12,8 @@
       <a href="https://gitee.com/wind_invade/chapter_reader/">chapter_reader</a> 重做，
       菜单位置：<b>Tools → Read</b>。</p>
     <ul>
-      <li>✅ 历史记录自动保存</li>
+      <li>✅ 历史记录自动保存（所有窗口共享）</li>
+      <li>✅ 选择目录后自动列出目录下全部书籍</li>
       <li>✅ 自定义适配想看的网站</li>
       <li>✅ 在线章节阅读 —— gitee 配置文件中已配置的网站</li>
       <li>✅ 在线全章节阅读</li>
@@ -26,6 +27,54 @@
   ]]></description>
 
   <change-notes><![CDATA[
+    <b>3.6.4</b>
+    <ul>
+      <li>Read 窗口标题行齿轮弹出的【功能菜单】改成与选书一致的<b>对话框</b>：一个可搜索的清单
+          （分组标题 + 图标 + 快捷键 + 说明），双击即执行，Esc / 取消关闭；不再是被工具窗抢焦点
+          的浮层，也就不会出现「再点一次关不掉」。</li>
+    </ul>
+    <b>3.6.3</b>
+    <ul>
+      <li>选书面板加上【历史记录】页：同一个对话框里既可以按目录挑书，也可以直接从历史记录里
+          挑一本继续读（历史行会带上它上次读到的章节与行号，直接续读）。各本地模式只显示与
+          该模式兼容的历史（Epub 模式只显示 epub，txt 模式只显示 txt），【打开书籍…】则显示全部。</li>
+    </ul>
+    <b>3.6.2</b>
+    <ul>
+      <li>修复 <b>Read 工具窗口无法用右侧边栏图标再次点击收起</b>（点一次打开、再点没反应）：
+          平台按「焦点所在组件」判断工具窗是否处于激活状态，而 Read 面板是不可获得焦点的
+          JPanel（空状态里只有 JLabel），所以窗口永远不会被判定为激活，每次点击都只是
+          「再激活一次」。现在 Read 面板可获得焦点，并把内容的首选焦点组件指向它；
+          侧边栏图标与 Ctrl+Alt+W 都能「再点一次收起」。</li>
+      <li>「Read窗口切换至本项目」(Ctrl+Alt+W) 改为真正的开关：已显示时收起，隐藏时打开。</li>
+      <li>快速清屏后用侧边栏图标重新显示 Read 窗口时自动恢复正文，不再停在「已隐藏」卡片上
+          （以前看起来同样像「点了没反应」）。</li>
+    </ul>
+    <b>3.6.1</b>
+    <ul>
+      <li>修复打开选书对话框时崩溃
+          （<code>ClassCastException: BookPickerDialog$Renderer cannot be cast to JBLabel</code>）：
+          列表渲染器把 <code>super.getListCellRendererComponent()</code> 返回的
+          <code>DefaultListCellRenderer</code> 强转成 <code>JBLabel</code>，两者没有继承关系。
+          现在直接配置渲染器自身。历史记录对话框里的同一处写法也一并修掉。</li>
+    </ul>
+    <b>3.6.0</b>
+    <ul>
+      <li>本地 / Epub 六种阅读模式改成<b>先选目录、再从文件列表选书</b>：选定书籍目录后自动列出
+          目录下全部可读文件（子目录可进入），双击即打开，并显示文件大小与修改时间；
+          对话框内仍保留「浏览…」回退到系统文件选择框。选过的目录会记住。</li>
+      <li>历史记录、书籍目录、上次读的书改为<b>全局共享</b>（应用级，不再按项目各存一份）：
+          打开多少个新窗口都共用同一份历史与目录，新窗口会自动恢复上次读的书；
+          各窗口的阅读进度仍各自独立，互不覆盖。旧版本存在项目文件里的历史记录会自动合并进来。</li>
+      <li>修复本地 txt 书籍重开 IDE / 新窗口后无法恢复阅读位置的问题：章节列表里的 URL 为空，
+          以前只能记到书名，现在按真实文件路径记录。</li>
+      <li>新增【打开书籍…】(Ctrl+Alt+O)：一个入口直接列出书籍目录下的全部书籍（txt / epub），
+          并在对话框里选择阅读方式，不必先想清楚该用哪个本地模式；Read 窗口里也有【选择书籍】按钮，
+          设置页的「书籍目录」一栏附上了选书入口说明。</li>
+      <li>修复 Read 窗口标题行的小齿轮图标：点开【功能菜单】后再点一次即可关闭
+          （以前平台会先因「点击外部」取消弹窗、紧接着这次点击又把菜单重新打开，看起来永远关不掉）；
+          状态栏的阅读弹出框同样支持再点一次关闭。</li>
+    </ul>
     <b>3.5.0</b>
     <ul>
       <li>修复一键隐藏阅读内容后无法恢复的问题：清屏后阅读位置保留在内存，再次按
@@ -196,27 +245,34 @@
 
     <!-- 本地阅读 -->
     <group id="ReadMenu.Local" text="本地阅读" popup="true">
+      <action id="BookReader.Local.OpenBook"
+              class="com.bookreader.reader.actions.OpenBookAction"
+              text="打开书籍…"
+              description="从书籍目录中选择一本书（自动列出目录下全部书籍，可选阅读方式）"
+              icon="AllIcons.Actions.MenuOpen">
+        <keyboard-shortcut keymap="$default" first-keystroke="control alt O"/>
+      </action>
       <action id="BookReader.Local.Read"
               class="com.bookreader.reader.actions.LocalReadAction"
               text="本地阅读模式"
-              description="选择 txt 文件与章节正则，在状态栏阅读"
+              description="选目录列文件（txt）+ 章节正则，在状态栏阅读"
               icon="/icons/bookReader.svg">
         <keyboard-shortcut keymap="$default" first-keystroke="control alt F"/>
       </action>
       <action id="BookReader.Local.ReadFull"
               class="com.bookreader.reader.actions.LocalReadFullAction"
               text="本地全章节阅读模式"
-              description="选择 txt 文件与章节正则，在 Read 窗口整章阅读">
+              description="选目录列文件（txt）+ 章节正则，在 Read 窗口阅读">
         <keyboard-shortcut keymap="$default" first-keystroke="control alt shift F"/>
       </action>
       <action id="BookReader.Local.Epub"
               class="com.bookreader.reader.actions.EpubReadAction"
               text="Epub阅读模式"
-              description="选择 epub 文件，在状态栏阅读"/>
+              description="选目录列文件（epub），在状态栏阅读"/>
       <action id="BookReader.Local.EpubFull"
               class="com.bookreader.reader.actions.EpubReadFullAction"
               text="Epub全章节阅读模式"
-              description="选择 epub 文件，在 Read 窗口整章阅读"/>
+              description="选目录列文件（epub），在 Read 窗口阅读"/>
       <action id="BookReader.Local.SimpleArticle"
               class="com.bookreader.reader.actions.SimpleArticleReadAction"
               text="简易文章阅读模式"
@@ -253,7 +309,7 @@
       <action id="BookReader.Control.ToolWindow"
               class="com.bookreader.reader.actions.ToolWindowAction"
               text="Read窗口切换至本项目"
-              description="显示右侧 Read 工具窗口">
+              description="显示 / 收起右侧 Read 工具窗口（与点侧边栏图标一致）">
         <keyboard-shortcut keymap="$default" first-keystroke="control alt W"/>
       </action>
       <action id="BookReader.Control.Convert"
@@ -271,7 +327,7 @@
       <action id="BookReader.Control.History"
               class="com.bookreader.reader.actions.HistoryAction"
               text="历史记录"
-              description="查看并恢复最近的阅读记录">
+              description="查看并恢复最近的阅读记录（所有窗口共享）">
         <keyboard-shortcut keymap="$default" first-keystroke="control alt H"/>
       </action>
       <action id="BookReader.Control.Font"

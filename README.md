@@ -26,14 +26,16 @@
 | **正常网站列表** | 并发检测 gitee 已配置站点是否仍可用，双击在浏览器打开 |
 | **网站节点调试** | 粘贴 FullPath 调试 `chapterPath` / `contentPath`，一键复制配置并打开 Gitee 提交 |
 | **保存网站到本地** | 把网页 HTML 保存到本地，便于获取 JS 动态生成的节点 |
-| **本地阅读模式** | 选择 txt + 章节正则（默认 `^第.*章.*`），支持章节跳转 |
+| **打开书籍** | `Ctrl+Alt+O`：对话框两个页签 —— 目录书籍 / 历史记录；按目录选书或从历史续读，并在下方选阅读方式 |
+| **本地阅读模式** | 先选书籍目录，目录下全部可读文件自动列出，双击选书 + 章节正则（默认 `^第.*章.*`），支持章节跳转 |
 | **本地全章节阅读模式** | 同上，整本在 Read 窗口阅读 |
-| **Epub 阅读 / Epub 全章节** | 用 epublib 解析 spine 与 `toc.ncx` / `nav.xhtml` |
+| **Epub 阅读 / Epub 全章节** | 同样先选目录再选文件；用 epublib 解析 spine 与 `toc.ncx` / `nav.xhtml` |
 | **简易文章阅读模式** | 仅按【单行展示最大字数】切分内容 |
 | **简易文本阅读模式** | 仅按文件换行符分行 |
 | **功能菜单** | 侧边栏 **Read** 按钮打开窗口后，点击顶部的【功能菜单】弹出全部功能，不必再到 Tools → Read 里找 |
-| **历史记录** | 自动保存书名、模式、章节数、内容行数、读到第几行；双击恢复 |
-| **阅读位置自动保存** | 按项目持久化，重开 IDE 自动恢复本地书籍位置 |
+| **历史记录** | 自动保存书名、模式、章节数、内容行数、读到第几行；双击恢复。**所有窗口共享**同一份列表，选书面板里也能直接挑 |
+| **跨窗口共享** | 历史记录、书籍目录、上次读的书存在应用级（`book-reader-library.xml`），打开几个新窗口都共用；新窗口自动恢复上次的书，各窗口阅读进度仍各自独立。书籍目录也可在设置页统一修改 |
+| **阅读位置自动保存** | 按窗口持久化，重开 IDE 自动恢复本地书籍位置 |
 | **内容过滤** | 每行一个正则，丢弃正文里的广告行 |
 | **字体选择** | 字体、字号、16 进制颜色，自动保存 |
 | **快速清屏** | `Ctrl+Alt+B` 一键隐藏全部阅读内容 |
@@ -59,6 +61,7 @@ Tools
     │   └── 保存网站到本地
     ├── ──────────
     ├── 本地阅读
+    │   ├── 打开书籍…                Ctrl+Alt+O
     │   ├── 本地阅读模式              Ctrl+Alt+F
     │   ├── 本地全章节阅读模式        Ctrl+Alt+Shift+F
     │   ├── Epub阅读模式
@@ -108,7 +111,7 @@ Tools
 ```
 ┌─ Read ─────────────────────────────┐
 │ 书名 / 章节 / 进度                    │   ← 书名信息
-│ [功能菜单]  [隐藏阅读内容]            │   ← 点击【功能菜单】弹出功能框
+│ [选择书籍]  [隐藏阅读内容]            │   ← 选书 / 一键隐藏
 │ [上一页][下一页][章节跳转][内容跳转]   │   ← 分页工具列
 │  [字体选择][内容过滤][历史记录]        │
 │ ────────────────────────────────── │
@@ -116,11 +119,13 @@ Tools
 └────────────────────────────────────┘
 ```
 
-【功能菜单】弹出的框按 Tools → Read 的分组列出全部 26 个功能，每行带图标、说明和快捷键，
-悬停高亮，点击即执行——它只是同一个动作的另一个入口，行为与菜单完全一致（通过
-`ActionManager` 按 action id 触发，不是第二份实现）。
+标题行右侧的小齿轮打开【功能菜单】对话框：按 Tools → Read 的分组列出全部功能，每行带图标、说明和
+快捷键，支持按名称/说明筛选，双击即执行——它只是同一个动作的另一个入口，行为与菜单完全一致（通过
+`ActionManager` 按 action id 触发，不是第二份实现）。对话框是模态的，Esc / 取消即可关闭。
 
 【隐藏阅读内容】是【快速清屏】的等价按钮（`Ctrl+Alt+B`）。
+
+右侧边栏的 **Read** 图标点一次打开窗口、再点一次收起（`Ctrl+Alt+W` 等价）。
 
 ---
 
@@ -207,9 +212,10 @@ https://gitee.com/wind_invade/chapter_reader/raw/master/chapter_config-v1.json
 src/main/kotlin/com/bookreader/reader/
 ├── ReaderMode.kt            八种阅读模式（来源 × 切分方式 × 显示面）
 ├── ReaderSettings.kt        插件设置（App 级持久化）
-├── ReaderController.kt      胶水层：启动模式、选文件、后台解析、刷新、清屏
+├── BookLibrary.kt           跨窗口共享：书籍目录 + 历史记录 + 上次读的书（App 级持久化）
+├── ReaderController.kt      胶水层：启动模式、选目录选书、后台解析、刷新、清屏
 ├── ReadingEngine.kt         阅读运行时：分页、翻页、跳转、自动翻页、按需加载
-├── ReadingState.kt          按项目持久化：当前书 + 位置 + 历史记录
+├── ReadingState.kt          按窗口持久化：当前书 + 位置（各窗口互不覆盖）
 ├── ReaderLog.kt             进度输出到 Notifications / Event Log
 ├── ReaderStartupActivity.kt 启动接线：订阅状态栏 + 恢复上次的本地书
 ├── model/
@@ -234,7 +240,7 @@ src/main/kotlin/com/bookreader/reader/
 │   ├── ReaderActionsCatalog.kt  功能菜单的条目元数据
 │   ├── ReadPanel.kt         全章节模式（Read 工具窗口）
 │   ├── ReadToolWindowFactory.kt
-│   └── dialogs/             网站列表、节点调试、章节跳转、内容跳转、字体、过滤、历史、帮助
+│   └── dialogs/             网站列表、节点调试、章节跳转、内容跳转、字体、过滤、历史、选书、帮助
 └── actions/ReaderActions.kt 全部菜单动作
 ```
 
@@ -265,20 +271,14 @@ kotlin.compiler.execution.strategy=in-process
 
 ### 命令
 
-仓库没有 wrapper 脚本，Gradle 用缓存里那份 8.10，并显式指向工作区内的
-`.gradle-home`（依赖都缓存在这里，代理与 `in-process` 编译策略也只在它的
-`gradle.properties` 生效）：
+仓库没有 wrapper 脚本，Gradle 用缓存里那份 8.10，并显式指向工作区内的 `.gradle-home`
+（依赖都缓存在这里，代理与 `in-process` 编译策略也只在它的范围内生效）：
 
 ```bash
-export JAVA_HOME="C:\\Program Files\\Java\\jdk-17.0.6"   # 必须 ≥ 11，否则 gradle 插件报 Java 8
-export GRADLE_USER_HOME="$PWD/.gradle-home"
-G="C:\\Users\\<user>\\.gradle\\wrapper\\dists\\gradle-8.10-bin\\<hash>\\gradle-8.10\\bin\\gradle.bat"
-
-"$G" --offline compileKotlin       # 编译
-"$G" --offline verifyReader        # 纯逻辑验证（见下）
-"$G" --offline checkPluginVersion  # 版本号一致性检查（buildPlugin 会先自动跑）
-"$G" --offline buildPlugin         # 产物 build/distributions/book-reader-<版本>.zip
-"$G" --offline runIde              # 启动沙箱 IDE 实测
+GRADLE="C:\Users\<用户>\.gradle\wrapper\dists\gradle-8.10-bin\<hash>\gradle-8.10\bin\gradle.bat"
+"$GRADLE" -g .gradle-home compileKotlin --offline
+"$GRADLE" -g .gradle-home buildPlugin --offline
+"$GRADLE" -g .gradle-home verifyReader --offline
 ```
 
 `--offline` 不可省：走代理解析依赖超时，最终也会回落到缓存。
@@ -287,7 +287,7 @@ G="C:\\Users\\<user>\\.gradle\\wrapper\\dists\\gradle-8.10-bin\\<hash>\\gradle-8
 Marketplace 校验用 [tools/verifier/run-verifier.ps1](tools/verifier/run-verifier.ps1)：
 
 ```bash
-powershell -File tools/verifier/run-verifier.ps1 -PluginZip build/distributions/book-reader-3.5.4.zip
+powershell -File tools/verifier/run-verifier.ps1 -PluginZip build/distributions/book-reader-3.6.4.zip
 ```
 
 它默认校验**构建目标 IDE（2023.2）**。注意这只覆盖最低版本：3.5.3 就是这样
@@ -295,6 +295,9 @@ powershell -File tools/verifier/run-verifier.ps1 -PluginZip build/distributions/
 想提前拦住这类问题，需要另外拿一份新 IDE 来跑同一个 CLI，做法与实测结果见
 [tools/verifier/verify-against-latest.md](tools/verifier/verify-against-latest.md)
 （3.5.3 在 2026.2 上精确复现 Marketplace 的 4 处弃用引用；3.5.4 在 2023.2 与 2026.2 上均 PASS）。
+3.6.0 起在本机对 2023.2 的复跑结果均为 `Compatible`（2026.x 的 IDE 在代理下下载失败，
+这一轮没能复跑；新增代码只用了公开构造函数、`FileChooser.chooseFile`、`DialogWrapper`
+与 `JBList`，没有引入任何 `@Deprecated` 引用）。
 
 ### 版本号（打包前必做）
 
@@ -320,82 +323,6 @@ pluginVersion=3.1.0
 > 本工作区**无法在前台跑长构建**（执行器会把它转后台并失败），因此仓库里带了
 > `.build/gradle-run.bat`：它把输出写到 `build.log` 并以后台进程运行。
 > 用法：先启动该 bat，再轮询 `build.log`。
-
-### Marketplace 上传校验（服务端，本地 IDE 装不出来）
-
-Marketplace 在上传时会跑两道**服务端**校验，本地 `buildPlugin` 成功并不代表能过：
-
-1. **`<description>` 必须以拉丁字符开头，且前 40 个字符内不能有中日韩字符。**
-   真实规则来自 `structure-base` 的 `ValidatorKt.validateDescriptionIsCorrect`：剥掉 HTML
-   后必须在**下标 0** 处匹配 `^[\w\s\p{Punct}–—]{40,}`。`\w` 与 `\p{Punct}` 都是 ASCII-only，
-   所以第 40 位之前出现一个汉字，匹配就会提前结束并直接判失败。
-   中文文案**不要删**，把它整体挪到拉丁开头之后即可（见 [plugin.xml](src/main/resources/META-INF/plugin.xml)）。
-   仓库里的 `tools/descriptor-check/ValidatorProbe.java` 就是这条规则的本地复现器。
-
-2. **不得使用平台内部 API。** 最常见的就是自己实现 `DataContext`：该接口是
-   `@ApiStatus.NonExtendable`，一旦匿名覆写 `getData(String)`，Verifier 会报
-   `Internal method usage — DataContext.getData(String)`。
-   **正确写法**是用平台自带的工厂：
-
-   ```kotlin
-   val context = SimpleDataContext.getProjectContext(project)
-   ```
-
-   `SimpleDataContext` 虽在 `.impl.` 包下，但**没有任何 `@ApiStatus.Internal` 标注**，
-   平台文档也明确推荐用它替代手写 `DataContext`。
-   但**别顺手拿它造 `AnActionEvent`**（`AnActionEvent.createFromAnAction(action, null, place, context)`）：
-   新版平台上这些工厂全部 `@Deprecated(forRemoval = true)`，会命中第 5 条。
-   触发动作请直接走第 3 条的 `ActionManager.tryToExecute`，DataContext 由它从 Component 解析。
-
-3. **不得调用标了 `@ApiStatus.OverrideOnly` 的方法。**
-   最常见的是 `AnAction.actionPerformed(AnActionEvent)`：插件可以**覆写**它，但绝不能**调用**它，
-   否则 Verifier 报 `Override-only method usage violation`。
-   **正确写法**是走平台的正规触发路径（它内部会先跑 `update()` 再执行）：
-
-   ```kotlin
-   ActionManager.getInstance().tryToExecute(
-       action,
-       null,               // inputEvent
-       contextComponent,   // 用它解析 DataContext（项目、编辑器…）
-       ActionPlaces.UNKNOWN,
-       true,               // now：在当前 EDT 上立即执行
-   )
-   ```
-
-   `tryToExecute` 是 `ActionManager` 的公开抽象方法，**从 231 到最新版本都存在，
-   且没有任何弃用/内部标注**——这是它胜出的原因，因为其它触发路径都断了：
-
-   - `ActionUtil.invokeAction(...)` 新版已 `@Deprecated`（3.5.3 就是被这条拒的）；
-     它的替代品 `ActionUtil.performAction(action, event)` 需要 `AnActionEvent.createEvent(...)`
-     造事件，而这两个 API 2023.2 上都不存在（`javap` 可验证）；
-   - `AnActionEvent.createFromAnAction(...)` 及旧构造函数同样是 `@Deprecated(forRemoval = true)`。
-
-   代价是它只能从 **Component** 解析 DataContext（不传则退化为当前焦点窗口的上下文），
-   所以要传一个**始终挂载、且属于目标项目**的组件：见 `ReadMenuPanel` 传的是工具窗组件——
-   面板自己的组件到执行时已经被 `beforeInvoke` 关闭的弹窗带离窗口树，不能再用。
-
-4. **被驳回的版本号不能重复上传**，改完必须升版本号（`pluginVersion` + 源 `plugin.xml` 的 `<version>`）。
-
-5. **不要调用标了 `@Deprecated` 的 API**（Verifier 报 `Deprecated methods usages` / `Deprecated constructor usage`）。
-   本项目踩过的四处（其中两处是 3.5.3 被拒后回查出来的）：
-
-   | 弃用 API | 替代写法 |
-   |---|---|
-   | `FileChooserDescriptorFactory.createSingleFileDescriptor()` | 当时换成了 `createSingleLocalFileDescriptor()`，**但它从 2025-02 起（IJPL-150176）也被 `@Deprecated` 了**（“其实允许选目录”），推荐的 `singleFile()` 2023.2 上又没有 → 改用公开构造函数 `FileChooserDescriptor(true, false, false, false, false, false)`，所有版本都有，新版只标 `@ApiStatus.Obsolete`（见 `ReaderController.singleFileDescriptor`） |
-   | `StatusBar.addWidget(StatusBarWidget)` | 用 `statusBarWidgetFactory` 扩展点（见 `plugin.xml` 的 `BookReaderStatus`）；四个 `addWidget` 重载全部弃用 |
-   | `ActionUtil.invokeAction(...)` | `ActionManager.tryToExecute(...)`（见第 3 条；3.5.3 被拒的主因之一） |
-   | `FileSaverDescriptor(String, String, String...)` | 新版的 `FileSaverDescriptor(String, String)` + `withExtensionFilter(String)` 与 2023.2 的 varargs 构造函数**在源码层面互斥**（新构造函数 2023.2 根本没有）→ 两个都走反射调用：字节码里不出现任何一个构造函数的引用，Verifier 只看字节码引用，就无从报起（见 `ReaderActions.saveDialogDescriptor`） |
-
-   > **Verifier 到底认什么**：只认 `@Deprecated`（Java/Kotlin 两种写法）与 `@ScheduledForRemoval`。
-   > `@ApiStatus.Obsolete` 不报（verifier-cli 的 `DeprecationUtilKt` 不解析它），上表第一行
-   > 的构造函数、以及 `createSingleFileDescriptor(FileType)` 这类 Obsolete 方法都能过——这是
-   > `since-build="231"` 下唯一还剩的余地。Obsolete 方法日后若被改成 `@Deprecated`（就像
-   > `createSingleLocalFileDescriptor` 刚经历的那样），会再次被拒，届时只能升最低版本。
-
-   > **为什么不能直接用新 API**：`singleFile()`（2025-02）、新的 `FileSaverDescriptor` 构造函数、
-   > `ActionUtil.performAction` / `AnActionEvent.createEvent` 全部只在较新平台存在（2023.2 上
-   > 都没有），直接换等于放弃 2023.2–2024.x 用户。上面几行都是“新旧版本都能跑、且两边都无弃用引用”的写法；
-   > 若日后提高最低版本，三处都可以换成直接调用。
 
 ### 依赖
 
@@ -464,13 +391,63 @@ powershell -File tools/descriptor-check/check.ps1
 
 ```
 id            = com.bookreader.reader
-name          = 小说阅读        (U+5C0F U+8BF4 U+9605 U+8BFB)
-version       = 3.0.6
+name          = book-read
+version       = 3.6.3
 sinceBuild    = 231
-dependencies  = [com.intellij.modules.platform]
+dependencies  = [PluginDependency(pluginId=com.intellij.modules.platform, isOptional=false, configFile=null, subDescriptor=null)]
 isCompatible  = true
 DESCRIPTOR LOADED OK
 ```
+
+### 3. Marketplace 规则（被拒记录）
+
+1. **描述符的 `description` / `change-notes` 首段必须以拉丁字符开头。**
+   Marketplace 校验第一段：必须在下标 0 处匹配 `^[\w\s\p{Punct}–—]{40,}` ——
+   开头 40 个字符必须全是 ASCII 可见字符；中文文案**不要删**，把它整体挪到拉丁开头之后即可
+   （见 [plugin.xml](src/main/resources/META-INF/plugin.xml)）。
+   仓库里的 `tools/descriptor-check/ValidatorProbe.java` 就是这条规则的本地复现器。
+
+2. **不得使用平台内部 API。** 最常见的就是自己实现 `DataContext`：该接口是
+   `@ApiStatus.NonExtendable`，一旦匿名覆写 `getData(String)`，Verifier 会报
+   `Internal method usage — DataContext.getData(String)`。**正确写法**是用平台自带的工厂
+   `SimpleDataContext.getProjectContext(project)`；但别顺手拿它造 `AnActionEvent`
+   （新版平台上这些工厂全部 `@Deprecated(forRemoval = true)`）。
+
+3. **不得调用标了 `@ApiStatus.OverrideOnly` 的方法。** 最常见的是
+   `AnAction.actionPerformed(AnActionEvent)`：插件可以**覆写**它，但绝不能**调用**它。
+   正确写法是走平台的正规触发路径 `ActionManager.tryToExecute(action, null, contextComponent, ActionPlaces.UNKNOWN, true)`
+   （见 `ReadMenuPanel.invoke`）。
+
+4. **被驳回的版本号不能重复上传**，改完必须升版本号（`pluginVersion` + 源 `plugin.xml` 的 `<version>`）。
+
+5. **不要调用标了 `@Deprecated` 的 API**（Verifier 报 `Deprecated methods usages` /
+   `Deprecated constructor usage`）。本项目踩过的四处（其中两处是 3.5.3 被拒后回查出来的）：
+
+   | 弃用 API | 替代写法 |
+   |---|---|
+   | `FileChooserDescriptorFactory.createSingleFileDescriptor()` | 当时换成了 `createSingleLocalFileDescriptor()`，**但它从 2025-02 起（IJPL-150176）也被 `@Deprecated` 了**；推荐的 `singleFile()` 2023.2 上又没有 → 改用公开构造函数 `FileChooserDescriptor(true, false, false, false, false, false)`，所有版本都有，新版只标 `@ApiStatus.Obsolete`（见 `ReaderController.singleFileDescriptor`） |
+   | `StatusBar.addWidget(StatusBarWidget)` | 用 `statusBarWidgetFactory` 扩展点（见 `plugin.xml` 的 `BookReaderStatus`）；四个 `addWidget` 重载全部弃用 |
+   | `ActionUtil.invokeAction(...)` | `ActionManager.tryToExecute(...)`（见第 3 条；3.5.3 被拒的主因之一） |
+   | `FileSaverDescriptor(String, String, String...)` | 新版的 `FileSaverDescriptor(String, String)` + `withExtensionFilter(String)` 与 2023.2 的 varargs 构造函数**在源码层面互斥** → 两个都走反射调用：字节码里不出现任何一个构造函数的引用，Verifier 只看字节码引用，就无从报起（见 `ReaderActions.saveDialogDescriptor`） |
+
+   > **Verifier 到底认什么**：只认 `@Deprecated`（Java/Kotlin 两种写法）与 `@ScheduledForRemoval`。
+   > `@ApiStatus.Obsolete` 不报（verifier-cli 的 `DeprecationUtilKt` 不解析它）。
+   > Obsolete 方法日后若被改成 `@Deprecated`（就像 `createSingleLocalFileDescriptor` 刚经历的那样），
+   > 会再次被拒，届时只能升最低版本。
+
+### 4. 平台行为核对
+
+排查「侧边栏图标点一次打开、再点一次没反应」时反编译了 2023.2 平台：
+
+* `com.intellij.ide.actions.ActivateToolWindowAction.actionPerformed` —— 只有
+  `!manager.isEditorComponentActive() && id.equals(manager.getActiveToolWindowId())`
+  时才走 `hideToolWindow(...)`，否则只是 `activateToolWindow(...)`；
+* `ToolWindowManagerImpl.getActiveToolWindowId()` —— 对停靠式工具窗，是由
+  **焦点所在组件**反推的（`ToolWindowManagerImplKt.getToolWindowIdForComponent`）。
+
+结论：工具窗内容必须能获得焦点，否则它永远不会被判定为「激活」，侧边栏图标的第二次点击
+就只是再激活一次（看起来没反应）。`ReadPanel` 因此设了 `isFocusable = true`，并把内容的
+`preferredFocusableComponent` 指向面板本身。
 
 ---
 
@@ -478,12 +455,120 @@ DESCRIPTOR LOADED OK
 
 任选其一：
 
-1. **Install Plugin from Disk** → 选 `build/distributions/book-reader-3.0.6.zip` → 重启 IDE
+1. **Install Plugin from Disk** → 选 `build/distributions/book-reader-3.6.4.zip` → 重启 IDE
 2. 解压后把 `book-reader/` 整个目录复制到 `<配置目录>/plugins/` → 重启 IDE
 
-首次使用请在 **Settings → Tools → 小说阅读** 里确认「是否开启插件 = 是」。
+首次使用请在 **Settings → Tools → Book Reader** 里确认「是否开启插件 = 是」。
 
 ---
+
+## 3.6.4 功能菜单改成对话框
+
+Read 窗口标题行齿轮弹出的【功能菜单】原来是锚在齿轮下方的 `JBPopup`（浮层）。浮层会和工具窗抢焦点，
+才引出 3.6.2 那一串「再点一次关不掉」的麻烦。现在改成与选书一致的**模态对话框**
+（`FeatureMenuDialog`）：
+
+- 一个清单，按 Tools → Read 的分组带标题；每行显示图标、名称、快捷键、说明；
+- 顶部可输入关键字筛选（匹配名称或说明），分组标题只在有匹配项时出现；
+- 双击 / 回车执行，Esc / 取消关闭；执行完对话框先关，再触发动作（避免动作里的对话框挂在
+  正在销毁的窗口上）；
+- 行仍然只是「按 action id 找动作并走 `ActionManager.tryToExecute`」，不是第二份实现。
+
+顺带删掉了不再使用的 `ReadMenuPanel.kt`（浮层面板 + 切换逻辑）。
+
+## 3.6.3 选书面板加上历史记录页
+
+【打开书籍…】/ 任一本地阅读模式的选书对话框现在有两个页签：
+
+- **目录书籍** —— 原来的目录列表：子目录可进入，全部可读文件列出，双击即读；
+- **历史记录** —— 直接列出以前读过的书（书名、模式、读到第几行、时间、路径），双击就从
+  **上次读到的章节与行号**继续，不用再回 `Ctrl+Alt+H` 的历史记录对话框。
+
+兼容性：各本地模式只显示与该模式匹配的历史（Epub 模式只列 epub 行，txt 模式只列 txt 行，
+远程历史只在【打开书籍…】里出现）；【打开书籍…】显示全部，选中远程行时会先加载站点配置
+再按在线模式打开。
+
+## 3.6.2 修复侧边栏图标无法再次点击收起 Read 窗口
+
+现象：点右侧边栏的 **Read** 图标打开面板后，再点一次没有任何反应，只能用面板里的
+「隐藏阅读内容」把它关掉。
+
+原因在平台侧的判定（反编译 `ActivateToolWindowAction` / `ToolWindowManagerImpl` 确认）：
+
+```java
+// 点侧边栏图标最终执行的就是这个动作
+if (!manager.isEditorComponentActive()
+        && toolWindowId.equals(manager.getActiveToolWindowId())) {
+    hideToolWindow(...);          // ← 只有「本窗口已激活」才收起
+} else {
+    activateToolWindow(...);      // ← 否则只是再激活一次（窗口已可见时＝无反应）
+}
+```
+
+而停靠式工具窗的 `getActiveToolWindowId()` 是**由焦点所在组件反推**的
+（`ToolWindowManagerImplKt.getToolWindowIdForComponent`）。我们的 `ReadPanel` 是普通
+`JPanel`（不可获得焦点），空状态里又只有 `JLabel`，所以焦点永远进不去 → 窗口永远
+不算「激活」→ 每次点击都走激活分支。
+
+修法：
+
+- `ReadPanel` 设 `isFocusable = true`，并在 `ReadToolWindowFactory` 里把内容的
+  `preferredFocusableComponent` 指向面板本身，让工具窗能正常获得焦点、被判定为激活；
+- 顺带把「Read窗口切换至本项目」(Ctrl+Alt+W) 做成真正的开关：已显示就收起，隐藏就打开
+  （以前只会 `activate`，已显示时同样是空操作）；
+- 另外，快速清屏后从侧边栏图标重新显示窗口时，会监听 `ToolWindowManagerListener.toolWindowShown`
+  自动把 `hidden` 复位并刷新，正文直接回来，不再停在「已隐藏」卡片上。
+
+## 3.6.1 修复选书对话框崩溃
+
+打开【打开书籍…】/ 任一本地模式时抛：
+
+```
+java.lang.ClassCastException: class com.bookreader.reader.ui.dialogs.BookPickerDialog$Renderer
+    cannot be cast to class com.intellij.ui.components.JBLabel
+    at BookPickerDialog$Renderer.getListCellRendererComponent(BookPickerDialog.kt:205)
+```
+
+原因：`DefaultListCellRenderer.getListCellRendererComponent()` 返回的是**它自己**（一个普通
+`javax.swing.JLabel`），而渲染器把返回值强转成 `JBLabel` —— 两者没有继承关系，必然失败；
+平台还会套一层 `ExpandedItemListCellRendererWrapper`，所以一渲染列表就崩。
+
+现在两个渲染器都改成直接配置自身（`text` / `icon` / `border` + `return this`），
+不再强转。历史记录对话框里同一处写法一并修掉。
+
+## 3.6.0 选目录列文件 + 历史/目录全局共享
+
+**打开书籍…：一个入口选书**
+
+- 菜单 `Tools → Read → 打开书籍…`（`Ctrl+Alt+O`）和 Read 窗口里的【选择书籍】按钮走同一个对话框：
+  列出书籍目录下的全部书籍（txt / epub），下方【阅读方式】下拉框会随所选文件只保留可用的模式
+  （epub 只给 Epub 两种，txt 给本地 / 简易几种），双击即读。
+- 设置页的「书籍目录」只负责记住书库位置，列书 / 选书在【打开书籍…】里；那一栏已加上这条说明，
+  免得设完目录后不知道去哪里选书。
+
+**选书流程：先选目录，再从文件列表选书**（本地 txt / epub 六个模式）
+
+- 点开任一本地模式后，先弹出书籍目录选择框（已选过目录则直接列出文件）；
+  目录下全部可读文件自动列出，子目录可双击进入，双击文件即打开，每行显示
+  文件大小与修改时间。
+- 对话框里保留「浏览…」按钮回退到原来的系统文件选择框，读目录外的书不受影响。
+- 选过的目录记在应用级状态里，所有 IDEA 窗口共用，新窗口打开即定位到同一目录。
+
+**历史记录 / 书籍目录 / 上次读的书改为全局共享**
+
+- 以前这些存在**项目级** `book-reader-state.xml`：每开一个新窗口（新项目）都是
+  空的，得重新选书；历史记录也各存一份。
+- 现在移到应用级 `BookLibrary`（`book-reader-library.xml`）：
+  - 历史记录一份，所有窗口看到的列表相同；
+  - 书籍目录一份，所有窗口共用；
+  - 「上次读的书」快照随翻页更新，**新窗口自动恢复上次的书**（在最近读到的位置）；
+  - 各窗口自己的阅读进度仍存在各自的 `ReadingState` 里，互不覆盖。
+- 升级兼容：旧版本写在项目文件里的 `<history>` 会在首次加载时合并进共享库，
+  已有记录不丢；下次保存后项目文件里不再重复保存历史。
+
+**顺带修掉的一个真问题**：本地 txt 的章节 `url` 是空的，以前「记住当前书」
+只能记到书名，重开 IDE / 新窗口时按路径找不到文件，本地 txt 的阅读位置其实
+恢复不了。现在 `BookContent` 带上真实来源路径，恢复与「重新初始化」都按它走。
 
 ## 3.5.0 清屏可恢复 + 显示样式选项英文
 

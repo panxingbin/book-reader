@@ -8,24 +8,14 @@ import com.intellij.openapi.components.Storage
 import com.intellij.openapi.project.Project
 import org.jdom.Element
 
-/** One row of the 历史记录 dialog. */
-data class HistoryEntry(
-    var title: String,
-    var modeName: String,
-    var path: String,
-    var chapterCount: Int,
-    var lineCount: Int,
-    var position: Int,
-    var visitedAt: Long,
-)
-
 /**
- * What the reader remembers between sessions: the book it was on, where in it,
- * and the recent history.
+ * What **this window** remembers between sessions: the book it was on, and where
+ * in it.
  *
- * Stored per project (a project that is closed and reopened should come back to
- * the same book) and written by hand as JDOM, matching the style used elsewhere
- * in this plugin.
+ * Deliberately still per project — two IDE windows may read two different books
+ * at two different positions, and neither should overwrite the other. Everything
+ * that must be shared across windows (书籍目录, 历史记录, 上次读的书) lives in
+ * [BookLibrary], the application-level counterpart.
  *
  * The chapter list is persisted too, so 历史记录 can show "320 章 · 12000 行"
  * without re-fetching anything. Restoring a remote book still has to fetch it
@@ -64,9 +54,6 @@ class ReadingState(private val project: Project) : PersistentStateComponent<Elem
 
     private var chapters: List<ChapterInfo> = emptyList()
 
-    /** Recently read books, newest first. */
-    private val history = ArrayList<HistoryEntry>()
-
     fun remember(
         mode: ReaderMode,
         path: String,
@@ -92,23 +79,6 @@ class ReadingState(private val project: Project) : PersistentStateComponent<Elem
     /** Saved chapters, so history rows can report the size without re-reading. */
     fun chapters(): List<ChapterInfo> = chapters
 
-    // ---- history -----------------------------------------------------------
-
-    /** Record a read (or update the entry for the same path), newest first. */
-    fun addHistory(entry: HistoryEntry) {
-        history.removeAll { it.path == entry.path && it.modeName == entry.modeName }
-        history.add(0, entry)
-        while (history.size > MAX_HISTORY) history.removeAt(history.size - 1)
-    }
-
-    fun history(): List<HistoryEntry> = history.toList()
-
-    fun clearHistory() = history.clear()
-
-    fun removeHistory(entry: HistoryEntry) {
-        history.removeAll { it.path == entry.path && it.modeName == entry.modeName }
-    }
-
     // ---- persistence -------------------------------------------------------
 
     override fun getState(): Element {
@@ -124,17 +94,6 @@ class ReadingState(private val project: Project) : PersistentStateComponent<Elem
             e.setAttribute("title", c.title)
             e.setAttribute("url", c.url)
             e.setAttribute("offset", c.startOffset.toString())
-            root.addContent(e)
-        }
-        for (h in history) {
-            val e = Element("history")
-            e.setAttribute("title", h.title)
-            e.setAttribute("mode", h.modeName)
-            e.setAttribute("path", h.path)
-            e.setAttribute("chapterCount", h.chapterCount.toString())
-            e.setAttribute("lineCount", h.lineCount.toString())
-            e.setAttribute("position", h.position.toString())
-            e.setAttribute("visitedAt", h.visitedAt.toString())
             root.addContent(e)
         }
         return root
@@ -158,25 +117,39 @@ class ReadingState(private val project: Project) : PersistentStateComponent<Elem
             )
         }.mapIndexed { i, c -> c.copy(index = i) }
 
-        history.clear()
-        for (e in state.getChildren("history")) {
-            history.add(
-                HistoryEntry(
-                    title = e.getAttributeValue("title").orEmpty(),
-                    modeName = e.getAttributeValue("mode").orEmpty(),
-                    path = e.getAttributeValue("path").orEmpty(),
-                    chapterCount = e.getAttributeValue("chapterCount")?.toIntOrNull() ?: 0,
-                    lineCount = e.getAttributeValue("lineCount")?.toIntOrNull() ?: 0,
-                    position = e.getAttributeValue("position")?.toIntOrNull() ?: 0,
-                    visitedAt = e.getAttributeValue("visitedAt")?.toLongOrNull() ?: 0L,
-                )
+        migrateLegacyHistory(state)
+    }
+
+    /**
+     * Releases before 3.6.0 kept 历史记录 in this project file. Hand those rows to
+     * the shared [BookLibrary] once, so an upgrade keeps every existing entry
+     * (and the per-project lists are merged instead of one winning).
+     *
+     * The children are not written back by [getState] any more, so after the next
+     * save the legacy block is gone.
+     */
+    private fun migrateLegacyHistory(state: Element) {
+        val legacy = state.getChildren("history").mapNotNull { e ->
+            val path = e.getAttributeValue("path") ?: return@mapNotNull null
+            val position = e.getAttributeValue("position")?.toIntOrNull() ?: 0
+            HistoryEntry(
+                title = e.getAttributeValue("title").orEmpty(),
+                modeName = e.getAttributeValue("mode").orEmpty(),
+                path = path,
+                chapterCount = e.getAttributeValue("chapterCount")?.toIntOrNull() ?: 0,
+                lineCount = e.getAttributeValue("lineCount")?.toIntOrNull() ?: 0,
+                position = position,
+                visitedAt = e.getAttributeValue("visitedAt")?.toLongOrNull() ?: 0L,
+                // Old rows only kept the absolute line; resume from chapter 0 at
+                // that offset, which is exact for whole-book / 简易 modes.
+                chapterIndex = 0,
+                lineInChapter = position,
             )
         }
+        if (legacy.isNotEmpty()) BookLibrary.instance().mergeHistory(legacy)
     }
 
     companion object {
-        const val MAX_HISTORY = 30
-
         fun getInstance(project: Project): ReadingState =
             project.getService(ReadingState::class.java)
     }

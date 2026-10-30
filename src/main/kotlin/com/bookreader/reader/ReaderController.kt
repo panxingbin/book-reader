@@ -3,6 +3,8 @@ package com.bookreader.reader
 import com.bookreader.reader.loader.BookLoader
 import com.bookreader.reader.ui.ReadPanelHolder
 import com.bookreader.reader.ui.ReaderStatusBar
+import com.bookreader.reader.ui.dialogs.BookPickerDialog
+import com.bookreader.reader.ui.dialogs.PickedBook
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.fileChooser.FileChooser
@@ -41,23 +43,26 @@ class ReaderController(private val project: Project) {
     fun start(mode: ReaderMode) {
         if (!ensureEnabled()) return
 
-        val settings = ReaderSettings.instance()
         when (mode.source) {
-            ReaderMode.Source.REMOTE -> startRemote(mode, settings)
+            ReaderMode.Source.REMOTE -> startRemote(mode)
             ReaderMode.Source.LOCAL_FILE -> {
                 if (mode.split == ReaderMode.Split.CHAPTERS) {
-                    chooseLocalText(mode) { file -> startLocalChapters(mode, file) }
+                    chooseLocalText(mode) { pick -> startLocalChapters(mode, pick) }
                 } else {
-                    chooseLocalText(mode) { file -> load(mode, file.absolutePath) }
+                    chooseLocalText(mode) { pick -> load(mode, pick.path, pick.chapterIndex, pick.lineInChapter) }
                 }
             }
-            ReaderMode.Source.EPUB -> chooseEpub { file -> load(mode, file.absolutePath) }
+            ReaderMode.Source.EPUB -> chooseEpub { pick -> load(mode, pick.path, pick.chapterIndex, pick.lineInChapter) }
         }
     }
 
-    private fun startRemote(mode: ReaderMode, settings: ReaderSettings) {
+    private fun startRemote(mode: ReaderMode) {
         val state = ReadingState.getInstance(project)
-        val initial = state.path.takeIf { it.startsWith("http") }.orEmpty()
+        // A brand-new window has no project state yet; prefill from the shared
+        // "last book" so the URL does not have to be retyped in every window.
+        val initial = sequenceOf(state.path, BookLibrary.instance().lastPath)
+            .firstOrNull { it.startsWith("http://", true) || it.startsWith("https://", true) }
+            .orEmpty()
 
         val url = Messages.showInputDialog(
             project,
@@ -97,7 +102,7 @@ class ReaderController(private val project: Project) {
         })
     }
 
-    private fun startLocalChapters(mode: ReaderMode, file: File) {
+    private fun startLocalChapters(mode: ReaderMode, pick: PickedBook) {
         val settings = ReaderSettings.instance()
         val regex = Messages.showInputDialog(
             project,
@@ -111,7 +116,9 @@ class ReaderController(private val project: Project) {
         if (regex.isNullOrEmpty()) return
 
         settings.chapterRegex = regex
-        load(mode, file.absolutePath)
+        // A 历史记录 row carries the chapter + offset it was left at; a fresh file
+        // pick has 0/0, which is exactly "start at the beginning".
+        load(mode, pick.path, pick.chapterIndex, pick.lineInChapter)
     }
 
     // ---- loading -----------------------------------------------------------
@@ -178,7 +185,9 @@ class ReaderController(private val project: Project) {
     }
 
     private fun recordHistory(book: com.bookreader.reader.model.BookContent, source: String) {
-        ReadingState.getInstance(project).addHistory(
+        // 历史记录 is shared by every window now, so it lives in BookLibrary
+        // instead of the per-project ReadingState.
+        BookLibrary.instance().addHistory(
             HistoryEntry(
                 title = book.title,
                 modeName = book.mode.name,
@@ -187,6 +196,8 @@ class ReaderController(private val project: Project) {
                 lineCount = book.lines.size,
                 position = engine.lineIndex,
                 visitedAt = System.currentTimeMillis(),
+                chapterIndex = engine.currentChapter().coerceAtLeast(0),
+                lineInChapter = engine.lineIndexInChapter(),
             )
         )
     }
@@ -194,7 +205,9 @@ class ReaderController(private val project: Project) {
     /** Re-open an entry from 历史记录. */
     fun openHistory(entry: HistoryEntry) {
         val mode = ReaderMode.byNameOrNull(entry.modeName) ?: ReaderMode.REMOTE
-        load(mode, entry.path, startLine = entry.position)
+        // `startLine` is an offset inside the chapter, so resume with the stored
+        // chapter + offset — handing over the absolute line would land elsewhere.
+        load(mode, entry.path, startChapter = entry.chapterIndex, startLine = entry.lineInChapter)
     }
 
     // ---- display control ---------------------------------------------------
@@ -228,9 +241,11 @@ class ReaderController(private val project: Project) {
         val target = book.mode.toggleFullChapter()
         if (target == book.mode) return
 
-        // The source is a URL only for the online modes; local/epub books are
-        // identified by their path, and the 简易 modes have no chapter list at all.
-        val source = book.chapters.firstOrNull()?.url?.takeIf { it.isNotBlank() }
+        // The source is the file path / catalog URL the loader was given; the
+        // online modes are the only ones where chapters carry a usable URL, and
+        // local .txt chapters carry none at all.
+        val source = book.source.takeIf { it.isNotBlank() }
+            ?: book.chapters.firstOrNull()?.url?.takeIf { it.isNotBlank() }
         if (source.isNullOrBlank()) {
             // 简易 modes: only the display surface changes, the text stays.
             val converted = book.copy(mode = target)
@@ -250,7 +265,8 @@ class ReaderController(private val project: Project) {
     fun restart() {
         val book = engine.book
         hidden = false
-        val source = book?.chapters?.firstOrNull()?.url?.takeIf { it.isNotBlank() }
+        val source = book?.source?.takeIf { it.isNotBlank() }
+            ?: book?.chapters?.firstOrNull()?.url?.takeIf { it.isNotBlank() }
             ?: ReadingState.getInstance(project).path.takeIf { it.isNotBlank() }
             ?: run { refresh(); return }
         val mode = book?.mode ?: ReaderMode.byNameOrNull(ReadingState.getInstance(project).modeName) ?: ReaderMode.DEFAULT
@@ -281,9 +297,49 @@ class ReaderController(private val project: Project) {
         if (book != null && book.mode.isFullChapter) activateReadWindow()
     }
 
-    /** 切换至本项目 — activate the Read tool window. */
+    /**
+     * Called when the **Read** tool window is shown by the platform (its stripe
+     * icon, a keyboard shortcut, our own [activateReadWindow]).
+     *
+     * A window blanked by 快速清屏 keeps [hidden] `true`; if that flag is not
+     * lifted the window comes back showing only the "已隐藏" card, which reads as
+     * "clicking the icon did nothing". Showing the window is an explicit request
+     * to see it, so reveal the content.
+     */
+    fun revealAfterShow() {
+        if (!hidden) return
+        hidden = false
+        refresh()
+    }
+
+    /** 全章节模式 or 恢复阅读 — activate the Read tool window. */
     fun activateReadWindow() {
         ToolWindowManager.getInstance(project).getToolWindow(TOOL_WINDOW_ID)?.activate(null, true)
+    }
+
+    /**
+     * Toggle the **Read** tool window the way the right-hand stripe icon does:
+     * visible → hide, hidden → show.
+     *
+     * Re-activating an already visible tool window is a no-op in the platform, so
+     * any caller that only called [activateReadWindow] had no way back out.
+     *
+     * Clearing [hidden] first matters: a window blanked by 快速清屏 keeps
+     * [hidden] `true`, and while [hidden] is `true` the Read panel shows only the
+     * "已隐藏" card — the window toggles fine but the text never comes back,
+     * which reads as "点了没反应".
+     */
+    fun toggleReadWindow() {
+        val toolWindow = ToolWindowManager.getInstance(project).getToolWindow(TOOL_WINDOW_ID) ?: return
+
+        if (toolWindow.isVisible) {
+            toolWindow.hide(null)
+            return
+        }
+
+        hidden = false
+        toolWindow.activate(null, true)
+        refresh()
     }
 
     /** Push the current state into the status bar and the tool window. */
@@ -297,20 +353,33 @@ class ReaderController(private val project: Project) {
     // ---- restore -----------------------------------------------------------
 
     /**
-     * Restore the book saved by [ReadingState] after the project opens.
+     * Restore the book after the project opens.
+     *
+     * This window's own [ReadingState] wins, so each window keeps its own
+     * progress. A window that has never opened a book — the "new window" case —
+     * falls back to the shared [BookLibrary] snapshot, so the last book is
+     * already open instead of having to be picked again.
      *
      * Only local sources are restored automatically: re-fetching a novel from a
      * website on every project open would be rude to the site and slow to boot.
      */
     fun restoreLast() {
         val state = ReadingState.getInstance(project)
-        val path = state.path
-        if (path.isBlank()) return
-        val mode = ReaderMode.byNameOrNull(state.modeName) ?: return
-        if (mode.source == ReaderMode.Source.REMOTE) return
-        if (!File(path).isFile) return
+        if (restoreLocal(state.modeName, state.path, state.chapterIndex, state.lineInChapter)) return
+        if (state.path.isNotBlank()) return
 
-        load(mode, path, state.chapterIndex, state.lineInChapter)
+        val library = BookLibrary.instance()
+        restoreLocal(library.lastModeName, library.lastPath, library.lastChapterIndex, library.lastLineInChapter)
+    }
+
+    private fun restoreLocal(modeName: String, path: String, chapterIndex: Int, lineInChapter: Int): Boolean {
+        if (path.isBlank()) return false
+        val mode = ReaderMode.byNameOrNull(modeName) ?: return false
+        if (mode.source == ReaderMode.Source.REMOTE) return false
+        if (!File(path).isFile) return false
+
+        load(mode, path, chapterIndex, lineInChapter)
+        return true
     }
 
     // ---- helpers -----------------------------------------------------------
@@ -325,23 +394,124 @@ class ReaderController(private val project: Project) {
         return false
     }
 
-    private fun chooseLocalText(mode: ReaderMode, onChosen: (File) -> Unit) {
-        val descriptor = singleFileDescriptor("${mode.title} — 选择小说文件")
-            .withFileFilter { file -> !file.isDirectory && file.extension?.lowercase() in TEXT_EXTENSIONS }
+    /**
+     * 打开书籍 — the one place that answers "I set the book directory, now where
+     * do I pick a book?".
+     *
+     * The dialog lists every readable file of the shared directory (txt and epub
+     * together) **and** 历史记录, and offers a 阅读方式 combo, so the mode is
+     * chosen right there instead of having to guess which of the six menu entries
+     * matches the file. Picking a history row resumes it where it was left.
+     */
+    fun openBookPicker() {
+        if (!ensureEnabled()) return
 
-        val chosen = FileChooser.chooseFile(descriptor, project, lastDirectory()) ?: return
-        val file = File(chosen.path)
-        if (!file.isFile) return
-        onChosen(file)
+        val directory = initialBookDirectory() ?: chooseBookDirectory() ?: return
+        val library = BookLibrary.instance()
+        val initialMode = ReaderMode.byNameOrNull(library.lastModeName)
+            ?.takeIf { it.source != ReaderMode.Source.REMOTE }
+            ?: ReaderMode.LOCAL
+
+        val dialog = BookPickerDialog(
+            project = project,
+            dialogTitle = "打开书籍",
+            extensions = BOOK_EXTENSIONS,
+            startDirectory = directory,
+            browse = { browseSingleFile("打开书籍", BOOK_EXTENSIONS) },
+            modes = ReaderMode.LOCAL_GROUP,
+            initialMode = initialMode,
+        )
+        dialog.show()
+
+        val pick = dialog.chosen ?: return
+        val mode = pick.mode ?: initialMode
+        pick.file?.let { library.rememberDirectory(it.parentFile?.absolutePath ?: directory.absolutePath) }
+
+        // A remote row from 历史记录 needs the shared site table first, exactly
+        // like 在线阅读模式 does before it loads.
+        if (mode.source == ReaderMode.Source.REMOTE) {
+            ensureSiteConfig { load(mode, pick.path, pick.chapterIndex, pick.lineInChapter) }
+            return
+        }
+
+        if (mode.split == ReaderMode.Split.CHAPTERS && mode.source == ReaderMode.Source.LOCAL_FILE) {
+            startLocalChapters(mode, pick)
+        } else {
+            load(mode, pick.path, pick.chapterIndex, pick.lineInChapter)
+        }
     }
 
-    private fun chooseEpub(onChosen: (File) -> Unit) {
-        val descriptor = singleFileDescriptor("选择 Epub 文件")
-            .withFileFilter { file -> !file.isDirectory && file.extension?.lowercase() == "epub" }
+    /**
+     * 选书：先选目录，再从目录的文件列表里挑一本（对话框里也能从历史记录挑）。
+     *
+     * The dialog lists every readable file of the directory and remembers the
+     * directory in [BookLibrary] (shared by all windows); 浏览… inside it falls
+     * back to the system single-file dialog for a book stored elsewhere.
+     */
+    private fun chooseLocalText(mode: ReaderMode, onChosen: (PickedBook) -> Unit) {
+        pickBook("${mode.title} — 选择书籍", TEXT_EXTENSIONS, onChosen)
+    }
 
-        val chosen = FileChooser.chooseFile(descriptor, project, lastDirectory()) ?: return
-        val file = File(chosen.path)
-        if (file.isFile) onChosen(file)
+    private fun chooseEpub(onChosen: (PickedBook) -> Unit) {
+        pickBook("选择 Epub 书籍", EPUB_EXTENSIONS, onChosen)
+    }
+
+    private fun pickBook(title: String, extensions: Set<String>, onChosen: (PickedBook) -> Unit) {
+        // First run (no remembered directory yet): ask for the directory up
+        // front — that is exactly the "选择目录后自动列出文件" flow.
+        val directory = initialBookDirectory() ?: chooseBookDirectory() ?: return
+
+        val dialog = BookPickerDialog(
+            project = project,
+            dialogTitle = title,
+            extensions = extensions,
+            startDirectory = directory,
+            browse = { browseSingleFile(title, extensions) },
+        )
+        dialog.show()
+
+        val pick = dialog.chosen ?: return
+        pick.file?.let {
+            BookLibrary.instance().rememberDirectory(it.parentFile?.absolutePath ?: directory.absolutePath)
+        }
+        onChosen(pick)
+    }
+
+    /** System "one file" dialog — the 浏览… escape hatch inside the picker. */
+    private fun browseSingleFile(title: String, extensions: Set<String>): File? {
+        val descriptor = singleFileDescriptor(title)
+            .withFileFilter { file -> !file.isDirectory && file.extension?.lowercase() in extensions }
+
+        val chosen = FileChooser.chooseFile(descriptor, project, lastDirectory()) ?: return null
+        return File(chosen.path).takeIf { it.isFile }
+    }
+
+    /** Ask for a book directory (folder-only dialog) and remember it. */
+    private fun chooseBookDirectory(): File? {
+        val descriptor = FileChooserDescriptor(false, true, false, false, false, false)
+            .withTitle("选择书籍目录")
+        val chosen = FileChooser.chooseFile(descriptor, project, lastDirectory()) ?: return null
+        val directory = File(chosen.path)
+        if (!directory.isDirectory) return null
+
+        BookLibrary.instance().rememberDirectory(directory.absolutePath)
+        return directory
+    }
+
+    /**
+     * Where the picker starts: the shared directory first (a new window opens on
+     * the same folder), then this project's last book folder, then the project root.
+     */
+    private fun initialBookDirectory(): File? {
+        val shared = BookLibrary.instance().bookDirectory
+        if (shared.isNotBlank()) {
+            File(shared).takeIf { it.isDirectory }?.let { return it }
+        }
+        val path = ReadingState.getInstance(project).path
+        if (path.isNotBlank() && !path.startsWith("http")) {
+            File(path).parentFile?.takeIf { it.isDirectory }?.let { return it }
+        }
+        return project.basePath?.let { File(it) }?.takeIf { it.isDirectory }
     }
 
     /**
@@ -363,8 +533,14 @@ class ReaderController(private val project: Project) {
         FileChooserDescriptor(true, false, false, false, false, false)
             .withTitle(title)
 
-    /** Open the file dialog where the last book was, so the user is not re-navigating. */
+    /** Start a system dialog where the last book was, so the user is not re-navigating. */
     private fun lastDirectory(): VirtualFile? {
+        val shared = BookLibrary.instance().bookDirectory
+        if (shared.isNotBlank()) {
+            File(shared).takeIf { it.isDirectory }?.let {
+                return LocalFileSystem.getInstance().refreshAndFindFileByPath(it.absolutePath)
+            }
+        }
         val path = ReadingState.getInstance(project).path
         if (path.isBlank() || path.startsWith("http")) return null
         val dir = File(path).parentFile ?: return null
@@ -375,6 +551,11 @@ class ReaderController(private val project: Project) {
         const val TOOL_WINDOW_ID = "Read"
 
         private val TEXT_EXTENSIONS = setOf("txt", "text", "md", "markdown", "log", "html", "htm")
+
+        private val EPUB_EXTENSIONS = setOf("epub")
+
+        /** Everything 打开书籍 can read — the mode combo decides how. */
+        private val BOOK_EXTENSIONS = TEXT_EXTENSIONS + EPUB_EXTENSIONS
 
         fun getInstance(project: Project): ReaderController =
             project.getService(ReaderController::class.java)

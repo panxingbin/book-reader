@@ -22,6 +22,11 @@ import com.bookreader.reader.ReaderMode
  *   parallel to [chapters] when every chapter is loaded, otherwise only the
  *   entries that are known (a value of -1 means "not loaded yet")
  * @property wholeBook `true` when [lines] already contains every chapter
+ * @property source where the book came from — the local file path or the online
+ *   catalog URL, exactly what [com.bookreader.reader.loader.BookLoader] was given.
+ *   Kept because a local .txt chapter carries an empty [ChapterInfo.url], so
+ *   without it "remember this book" would store a bare title and restoring the
+ *   position after an IDE restart could never find the file.
  */
 data class BookContent(
     val title: String,
@@ -30,6 +35,7 @@ data class BookContent(
     val lines: MutableList<String>,
     val chapterLineStarts: IntArray,
     val wholeBook: Boolean,
+    val source: String = "",
 ) {
     /** Index of the chapter that contains display line [lineIndex], or -1. */
     fun chapterAtLine(lineIndex: Int): Int {
