@@ -1,7 +1,7 @@
 <idea-plugin>
   <id>com.bookreader.reader</id>
   <name>book-read</name>
-  <version>3.6.4</version>
+  <version>3.7.0</version>
   <idea-version since-build="231"/>
 
   <vendor email="bookreader@example.com" url="https://gitee.com/wind_invade/chapter_reader">BookReader</vendor>
@@ -27,6 +27,33 @@
   ]]></description>
 
   <change-notes><![CDATA[
+    <b>3.7.0</b>
+    <ul>
+      <li><b>章末翻页不再卡住 IDE</b>：在线小说翻到章末需要加载下一章，以前这个网络请求
+          直接跑在界面上（最长卡「远程读取超时」那么久）。现在改为后台加载——读到一章
+          最后约 20 行时就开始<b>预取下一章</b>，真到边界时立即翻页；加载完成会自动翻过
+          去，自动阅读也不会因此中断（连续 3 次加载失败才停止）。章节跳转同样改到后台。</li>
+      <li><b>Read 窗口支持键盘与滚轮翻页</b>：阅读区获得焦点时 → / Space / PgDn 下一页、
+          ← / Shift+Space / PgUp 上一页；滚轮滚到页尾再往下滚即翻页，页首往上滚即回翻，
+          中间照常滚动。工具栏新增【上一章】【下一章】按钮（默认快捷键
+          Ctrl+Alt+[ / Ctrl+Alt+]）。</li>
+      <li><b>状态栏弹出框可以翻页和调速</b>：弹出阅读框底部新增【上一页】【下一页】
+          【速度 −】【速度 +】按钮，普通模式全程可用鼠标阅读；Read 窗口工具栏同样加了
+          速度按钮，自动翻页间隔即时生效（1–600 秒）。</li>
+      <li><b>读头/读尾有可见提示</b>：翻到开头/结尾、没有上一章/下一章时，状态栏（状态栏
+          样式）与 Read 窗口信息行会短暂显示提示，而不是只在日志里。</li>
+      <li><b>本地章节正则不再每次询问</b>：读过的书（历史记录里有）或从选书对话框历史页签
+          续读时，直接按已保存的正则打开；新书弹出的输入框带「记住此正则，以后不再询问」
+          复选框，勾选后不再打扰（正则仍可在设置页修改）。</li>
+      <li><b>章节列表标出当前章</b>：正在读的章节带 ▶ 标记并选中、滚动到可见位置。</li>
+      <li><b>内容跳转支持百分比</b>：新增进度滑条，按百分比拖动或直接输入行号均可。</li>
+      <li><b>尾部行号修正</b>：全章节模式开启尾部行号时，以前每一行都显示同一个页首行号，
+          现在显示每行自己的行号（与内容跳转一致）。</li>
+      <li><b>每页行数可按窗口高度自适应</b>：设置里「全章节每页行数」填 0 即可。</li>
+      <li><b>历史记录删除/清空前先确认</b>。</li>
+      <li><b>有人来了就按我</b> 默认快捷键从 Ctrl+Alt+B 改为 <b>Ctrl+Alt+X</b>——原键位与
+          IDE 内置「Go to Implementation(s)」冲突；可在 Keymap 中改回。</li>
+    </ul>
     <b>3.6.4</b>
     <ul>
       <li>Read 窗口标题行齿轮弹出的【功能菜单】改成与选书一致的<b>对话框</b>：一个可搜索的清单
@@ -292,12 +319,12 @@
               text="有人来了就按我"
               description="隐藏阅读内容，再次按下即恢复（不重新加载）"
               icon="AllIcons.General.HideToolWindow">
-        <keyboard-shortcut keymap="$default" first-keystroke="control alt B"/>
+        <keyboard-shortcut keymap="$default" first-keystroke="control alt X"/>
       </action>
       <action id="BookReader.Control.Swipe"
               class="com.bookreader.reader.actions.SwipeAction"
               text="快速清屏"
-              description="一键清屏，立即隐藏阅读内容（Ctrl+Alt+B 可恢复）">
+              description="一键清屏，立即隐藏阅读内容（Ctrl+Alt+X 可恢复）">
         <keyboard-shortcut keymap="$default" first-keystroke="control alt 1"/>
       </action>
       <action id="BookReader.Control.Restart"
@@ -343,7 +370,21 @@
       <action id="BookReader.Control.JumpContent"
               class="com.bookreader.reader.actions.JumpContentAction"
               text="内容跳转"
-              description="跳转到指定行号"/>
+              description="按行号或百分比跳转"/>
+      <action id="BookReader.Control.PrevChapter"
+              class="com.bookreader.reader.actions.PreviousChapterAction"
+              text="上一章"
+              description="跳转到上一章（章节模式；在第一章时回到开头）"
+              icon="AllIcons.Actions.PreviousOccurence">
+        <keyboard-shortcut keymap="$default" first-keystroke="control alt OPEN_BRACKET"/>
+      </action>
+      <action id="BookReader.Control.NextChapter"
+              class="com.bookreader.reader.actions.NextChapterAction"
+              text="下一章"
+              description="跳转到下一章（章节模式）"
+              icon="AllIcons.Actions.NextOccurence">
+        <keyboard-shortcut keymap="$default" first-keystroke="control alt CLOSE_BRACKET"/>
+      </action>
       <action id="BookReader.Control.Prev"
               class="com.bookreader.reader.actions.PreviousPageAction"
               text="上一页"

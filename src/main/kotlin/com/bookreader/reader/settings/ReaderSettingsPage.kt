@@ -183,7 +183,7 @@ class ReaderSettingsPage : Configurable {
         field("所有窗口共享的书籍目录：", buildBookDirectoryPanel())
 
         section("阅读")
-        field("全章节每页行数：", linesPerPageField)
+        field("全章节每页行数（0 = 按窗口高度自适应）：", linesPerPageField)
         field("自动下一页间隔(x/秒)：", autoNextField)
         field("章节正则（本地 txt / epub）：", regexField)
         field("Read窗口字体：", fontFamilyField)
@@ -362,7 +362,7 @@ class ReaderSettingsPage : Configurable {
         text(fontFamilyField) { s.fontFamily = it; refresh() }
         text(fontSizeField) { s.fontSize = it.toIntOrNull()?.coerceIn(8, 72) ?: 14; refresh() }
         text(fontColorField) { s.fontColorHex = it; refresh() }
-        text(linesPerPageField) { s.linesPerPage = it.toIntOrNull()?.coerceIn(1, 200) ?: 30; refresh() }
+        text(linesPerPageField) { s.linesPerPage = it.toIntOrNull()?.coerceIn(0, 200) ?: 30; refresh() }
         text(autoNextField) { s.autoNextSeconds = it.toIntOrNull()?.coerceIn(1, 600) ?: 5 }
         text(configUrlField) { s.remoteConfigUrl = it }
 

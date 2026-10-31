@@ -6,6 +6,7 @@ import com.bookreader.reader.ReaderController
 import com.bookreader.reader.ReaderMode
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogWrapper
+import com.intellij.openapi.ui.Messages
 import com.intellij.ui.components.JBList
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.util.ui.JBUI
@@ -58,8 +59,10 @@ class HistoryDialog(private val project: Project) : DialogWrapper(project) {
         buttons.add(JButton("删除").apply { addActionListener { removeSelected() } })
         buttons.add(JButton("清空").apply {
             addActionListener {
-                library.clearHistory()
-                reload()
+                if (confirmClear()) {
+                    library.clearHistory()
+                    reload()
+                }
             }
         })
 
@@ -91,9 +94,25 @@ class HistoryDialog(private val project: Project) : DialogWrapper(project) {
 
     private fun removeSelected() {
         val entry = selectedEntry() ?: return
+        // 删除 / 清空都不可撤销，先确认再动手。
+        val answer = Messages.showYesNoDialog(
+            project,
+            "删除历史记录「${entry.title}」？",
+            "历史记录",
+            Messages.getQuestionIcon(),
+        )
+        if (answer != Messages.YES) return
         library.removeHistory(entry)
         reload()
     }
+
+    private fun confirmClear(): Boolean =
+        Messages.showYesNoDialog(
+            project,
+            "清空全部历史记录？该操作无法撤销。",
+            "历史记录",
+            Messages.getWarningIcon(),
+        ) == Messages.YES
 
     private class Renderer : DefaultListCellRenderer() {
         private val format = SimpleDateFormat("MM-dd HH:mm")

@@ -47,6 +47,11 @@ data class PickedBook(
     val mode: ReaderMode?,
     val chapterIndex: Int,
     val lineInChapter: Int,
+    /**
+     * `true` when the pick came from a 历史记录 row — the book has been read
+     * before, so the chapter-regex prompt is skipped and it opens right away.
+     */
+    val fromHistory: Boolean = false,
 )
 
 /**
@@ -347,6 +352,7 @@ class BookPickerDialog(
             mode = if (modes.isNotEmpty()) ReaderMode.byNameOrNull(entry.modeName) else null,
             chapterIndex = entry.chapterIndex,
             lineInChapter = entry.lineInChapter,
+            fromHistory = true,
         )
         super.doOKAction()
     }

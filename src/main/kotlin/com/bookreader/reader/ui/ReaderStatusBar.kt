@@ -18,8 +18,10 @@ import java.awt.BorderLayout
 import java.awt.Color
 import java.awt.Font
 import java.awt.event.MouseEvent
+import javax.swing.JButton
 import javax.swing.JComponent
 import javax.swing.JLabel
+import javax.swing.JPanel
 import javax.swing.SwingConstants
 
 /**
@@ -99,6 +101,21 @@ object ReaderStatusBar {
         }
     }
 
+    /**
+     * A transient status-bar message — 已经读到末尾了 / 已经是最前面了 / 已经是最后一章了.
+     *
+     * Only the 状态栏 style may host it: the hint / navbar styles exist to keep
+     * the status bar completely blank, so a flash there would cancel out their
+     * whole point. It restores itself to the real reading state after ~2s.
+     */
+    fun flash(project: Project, text: String) {
+        val settings = ReaderSettings.instance()
+        if (!settings.enabled) return
+        if (settings.displayStyle != ReaderSettings.DisplayStyle.BOTTOM_LEFT) return
+        if (ReaderController.getInstance(project).hidden) return
+        widgetOf(project)?.flash(text) { update(project) }
+    }
+
     private fun buildTooltip(project: Project, engine: ReadingEngine): String {
         val book = engine.book ?: return "Book Reader"
         val chapter = engine.currentChapter()
@@ -156,6 +173,10 @@ class ReaderStatusBarWidget(private val project: Project) :
      */
     private var statusBar: StatusBar? = null
 
+    /** The live [flash] timer, so a new flash (or a real update) can cancel it. */
+    @Volatile
+    private var flashTimer: javax.swing.Timer? = null
+
     override fun ID(): String = WIDGET_ID
 
     override fun getPresentation(): StatusBarWidget.WidgetPresentation = this
@@ -171,6 +192,8 @@ class ReaderStatusBarWidget(private val project: Project) :
     }
 
     override fun dispose() {
+        flashTimer?.stop()
+        flashTimer = null
         popup?.cancel()
         popup = null
         statusBar = null
@@ -196,10 +219,28 @@ class ReaderStatusBarWidget(private val project: Project) :
 
     /** Show a reading line, or the idle placeholder. */
     fun showLine(text: String, tooltip: String) {
+        flashTimer?.stop()
+        flashTimer = null
         this.text = text.ifBlank { " " }
         this.tooltip = tooltip
         this.idle = false
         repaint()
+    }
+
+    /**
+     * Show [text] for [FLASH_MS], then re-render the real state through
+     * [restore] — used for 读头/读尾 feedback like 已经读到末尾了.
+     */
+    fun flash(text: String, restore: () -> Unit) {
+        flashTimer?.stop()
+        this.text = text.ifBlank { " " }
+        this.tooltip = "Book Reader"
+        this.idle = false
+        repaint()
+        flashTimer = javax.swing.Timer(FLASH_MS) {
+            flashTimer = null
+            restore()
+        }.apply { isRepeats = false; start() }
     }
 
     /** The status-bar indicator shown when the line lives elsewhere (hint / navbar). */
@@ -269,6 +310,9 @@ class ReaderStatusBarWidget(private val project: Project) :
 
         /** Grace window for "this click closed the popup" — see [popupCancelledAt]. */
         private const val CLICK_GRACE_MS = 300L
+
+        /** How long a [flash] message stays visible before restoring. */
+        private const val FLASH_MS = 2000
     }
 }
 
@@ -296,12 +340,19 @@ class ReaderStatusBarWidgetFactory : StatusBarWidgetFactory {
  * The popup shown by 代码弹出框 mode (and by clicking the status bar line).
  *
  * Deliberately plain: monospaced text on a neutral background, so it reads like
- * an IDE tooltip rather than a book.
+ * an IDE tooltip rather than a book. The button row makes it a complete reading
+ * surface — page, adjust the auto-next speed, all without touching the keyboard
+ * shortcuts.
  */
 class ReaderPopupPanel(private val project: Project) : JComponent() {
 
     private val textLabel = JLabel()
     private val infoLabel = JLabel()
+
+    private var flashTimer: javax.swing.Timer? = null
+
+    private val engine: ReadingEngine get() = project.getService(ReadingEngine::class.java)
+    private val controller: ReaderController get() = ReaderController.getInstance(project)
 
     init {
         layout = BorderLayout()
@@ -315,14 +366,64 @@ class ReaderPopupPanel(private val project: Project) : JComponent() {
         infoLabel.horizontalAlignment = SwingConstants.LEFT
 
         add(textLabel, BorderLayout.CENTER)
-        add(infoLabel, BorderLayout.SOUTH)
+        add(buildButtons(), BorderLayout.SOUTH)
 
-        preferredSize = java.awt.Dimension(JBUI.scale(460), JBUI.scale(200))
+        preferredSize = java.awt.Dimension(JBUI.scale(460), JBUI.scale(240))
         refresh()
     }
 
+    /** Page / speed row, so the popup can be driven entirely by mouse. */
+    private fun buildButtons(): JComponent {
+        val row = JPanel(java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 4, 2))
+
+        fun button(text: String, tooltip: String, action: () -> Unit) =
+            JButton(text).apply {
+                toolTipText = tooltip
+                isFocusable = false
+                addActionListener { action() }
+            }
+
+        row.add(button("上一页", "上一页（Ctrl+Alt+2）") { page(forward = false) })
+        row.add(button("下一页", "下一页（Ctrl+Alt+3）") { page(forward = true) })
+        row.add(
+            button("速度 −", "自动翻页间隔 −1 秒") {
+                engine.adjustAutoNextSeconds(-1)
+                refresh()
+            },
+        )
+        row.add(
+            button("速度 +", "自动翻页间隔 +1 秒") {
+                engine.adjustAutoNextSeconds(+1)
+                refresh()
+            },
+        )
+        return row
+    }
+
+    private fun page(forward: Boolean) {
+        if (forward) {
+            when (controller.nextPage()) {
+                ReadingEngine.PageTurn.END -> flashInfo("已经是最后一页了")
+                ReadingEngine.PageTurn.LOADING -> flashInfo("正在加载下一章…")
+                ReadingEngine.PageTurn.MOVED -> Unit
+            }
+        } else if (!controller.previousPage()) {
+            flashInfo("已经是最前面了")
+        }
+        refresh()
+    }
+
+    /** Show [text] in the info row for a moment, then fall back to the real state. */
+    private fun flashInfo(text: String) {
+        flashTimer?.stop()
+        infoLabel.text = text
+        flashTimer = javax.swing.Timer(FLASH_MS) {
+            flashTimer = null
+            refresh()
+        }.apply { isRepeats = false; start() }
+    }
+
     fun refresh() {
-        val engine = project.getService(ReadingEngine::class.java)
         val book = engine.book
         if (book == null) {
             textLabel.text = "<html>还没有开始阅读。<br>菜单：Tools → Read</html>"
@@ -340,10 +441,16 @@ class ReaderPopupPanel(private val project: Project) : JComponent() {
 
         val chapter = engine.currentChapter()
         val chapterText = if (chapter in book.chapters.indices) "第 ${chapter + 1} 章  " else ""
-        infoLabel.text = "  $chapterText${engine.lineIndex + 1}/${book.lines.size} 行 · ${engine.progressPercent()}%" +
-            "   [Ctrl+Alt+2 上一页 · Ctrl+Alt+3 下一页 · Ctrl+Alt+B 清屏]"
+        infoLabel.text =
+            "  $chapterText${engine.lineIndex + 1}/${book.lines.size} 行 · ${engine.progressPercent()}%" +
+                "   [Ctrl+Alt+2 上一页 · Ctrl+Alt+3 下一页 · Ctrl+Alt+X 清屏]"
     }
 
     private fun escape(line: String): String =
         line.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").ifBlank { "&nbsp;" }
+
+    private companion object {
+        /** How long a flashInfo message stays before the real info row returns. */
+        const val FLASH_MS = 1800
+    }
 }

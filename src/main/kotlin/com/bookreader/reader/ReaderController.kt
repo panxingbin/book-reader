@@ -4,6 +4,7 @@ import com.bookreader.reader.loader.BookLoader
 import com.bookreader.reader.ui.ReadPanelHolder
 import com.bookreader.reader.ui.ReaderStatusBar
 import com.bookreader.reader.ui.dialogs.BookPickerDialog
+import com.bookreader.reader.ui.dialogs.ChapterRegexDialog
 import com.bookreader.reader.ui.dialogs.PickedBook
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
@@ -104,18 +105,20 @@ class ReaderController(private val project: Project) {
 
     private fun startLocalChapters(mode: ReaderMode, pick: PickedBook) {
         val settings = ReaderSettings.instance()
-        val regex = Messages.showInputDialog(
-            project,
-            "请输入【章节标题】正则（默认 ${ReaderSettings.DEFAULT_CHAPTER_REGEX}）：\n" +
-                "示例：【第.*章.*】匹配【第1238章 标题】；加上 ^ 可只识别行首。",
-            mode.title,
-            Messages.getQuestionIcon(),
-            settings.chapterRegex,
-            null,
-        )?.trim()
-        if (regex.isNullOrEmpty()) return
+        // 续读不再打断：这本书读过（历史里有，或选书对话框直接从历史页签挑的）、
+        // 或设置里关掉了询问，就直接按已保存的正则开书；只有没见过的新书才弹
+        // 一次输入框。正则想改，去设置页改「章节正则」。
+        val seenBefore = pick.fromHistory || BookLibrary.instance().history().any { it.path == pick.path }
+        if (!settings.askChapterRegex || seenBefore) {
+            load(mode, pick.path, pick.chapterIndex, pick.lineInChapter)
+            return
+        }
 
-        settings.chapterRegex = regex
+        val dialog = ChapterRegexDialog(project, settings.chapterRegex)
+        if (!dialog.showAndGet()) return
+
+        settings.chapterRegex = dialog.regex()
+        if (dialog.doNotAskAgain()) settings.askChapterRegex = false
         // A 历史记录 row carries the chapter + offset it was left at; a fresh file
         // pick has 0/0, which is exactly "start at the beginning".
         load(mode, pick.path, pick.chapterIndex, pick.lineInChapter)
@@ -220,10 +223,35 @@ class ReaderController(private val project: Project) {
     }
 
     /** 下一页. */
-    fun nextPage(): Boolean {
-        val moved = engine.next()
+    fun nextPage(): ReadingEngine.PageTurn {
+        val outcome = engine.nextPageTurn()
         refresh()
-        return moved
+        return outcome
+    }
+
+    /** 上一章 — jump to the previous chapter; at the first one, to the very start. */
+    fun previousChapter(): Boolean {
+        engine.book ?: return false
+        val current = engine.currentChapter()
+        return if (current > 0) {
+            engine.goToChapter(current - 1)
+            refresh()
+            true
+        } else {
+            engine.goToLine(0)
+            refresh()
+            false
+        }
+    }
+
+    /** 下一章 — jump to the next chapter; `false` at the last one. */
+    fun nextChapter(): Boolean {
+        val book = engine.book ?: return false
+        val current = engine.currentChapter()
+        if (current + 1 >= book.chapters.size) return false
+        engine.goToChapter(current + 1)
+        refresh()
+        return true
     }
 
     /** 自动下一页【再次按下则停止】. */

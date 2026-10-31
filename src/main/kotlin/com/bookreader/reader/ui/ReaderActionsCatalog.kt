@@ -105,10 +105,10 @@ object ReaderActionsCatalog {
             rows = listOf(
                 Row(
                     "BookReader.Control.BossKey", "有人来了就按我", "隐藏/恢复阅读内容（隐藏后再次按下恢复，无需重新加载）",
-                    "Ctrl+Alt+B", AllIcons.General.HideToolWindow,
+                    "Ctrl+Alt+X", AllIcons.General.HideToolWindow,
                 ),
                 Row(
-                    "BookReader.Control.Swipe", "快速清屏", "一键清屏，立即隐藏阅读内容（按 Ctrl+Alt+B 可恢复）",
+                    "BookReader.Control.Swipe", "快速清屏", "一键清屏，立即隐藏阅读内容（按 Ctrl+Alt+X 可恢复）",
                     "Ctrl+Alt+1", AllIcons.General.HideToolWindow,
                 ),
                 Row(
@@ -140,8 +140,16 @@ object ReaderActionsCatalog {
                     "Ctrl+Alt+J", AllIcons.Actions.ListFiles,
                 ),
                 Row(
-                    "BookReader.Control.JumpContent", "内容跳转", "跳转到指定行号",
+                    "BookReader.Control.JumpContent", "内容跳转", "按行号或百分比跳转",
                     "", AllIcons.Actions.Find,
+                ),
+                Row(
+                    "BookReader.Control.PrevChapter", "上一章", "跳转到上一章（章节模式；在第一章时回到开头）",
+                    "Ctrl+Alt+[", AllIcons.Actions.PreviousOccurence,
+                ),
+                Row(
+                    "BookReader.Control.NextChapter", "下一章", "跳转到下一章（章节模式）",
+                    "Ctrl+Alt+]", AllIcons.Actions.NextOccurence,
                 ),
                 Row(
                     "BookReader.Control.Prev", "上一页", "上一页",

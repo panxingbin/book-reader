@@ -6,6 +6,7 @@ import com.bookreader.reader.ReaderLog
 import com.bookreader.reader.ReaderMode
 import com.bookreader.reader.ReadingEngine
 import com.bookreader.reader.remote.Http
+import com.bookreader.reader.ui.ReaderStatusBar
 import com.bookreader.reader.ui.dialogs.ChapterListDialog
 import com.bookreader.reader.ui.dialogs.ContentFilterDialog
 import com.bookreader.reader.ui.dialogs.DomainListDialog
@@ -195,14 +196,42 @@ private fun saveDialogDescriptor(title: String, description: String, extension: 
 /** 上一页. */
 class PreviousPageAction : ReaderAction() {
     override fun perform(project: com.intellij.openapi.project.Project, controller: ReaderController) {
-        if (!controller.previousPage()) ReaderLog.debug("已经是最前面了。")
+        if (!controller.previousPage()) ReaderStatusBar.flash(project, "已经是最前面了。")
     }
 }
 
 /** 下一页. */
 class NextPageAction : ReaderAction() {
     override fun perform(project: com.intellij.openapi.project.Project, controller: ReaderController) {
-        if (!controller.nextPage()) ReaderLog.debug("已经读到末尾了。")
+        when (controller.nextPage()) {
+            ReadingEngine.PageTurn.END -> ReaderStatusBar.flash(project, "已经读到末尾了。")
+            ReadingEngine.PageTurn.LOADING -> ReaderLog.load("正在加载下一章…")
+            ReadingEngine.PageTurn.MOVED -> Unit
+        }
+    }
+}
+
+/** 上一章 — jump to the previous chapter (章节模式); at the first one, to the start. */
+class PreviousChapterAction : ReaderAction() {
+    override fun perform(project: com.intellij.openapi.project.Project, controller: ReaderController) {
+        if (!controller.previousChapter()) ReaderStatusBar.flash(project, "已经是第一章了。")
+    }
+
+    override fun update(event: AnActionEvent) {
+        val project = event.project ?: return
+        event.presentation.isEnabled = project.getService(ReadingEngine::class.java).book != null
+    }
+}
+
+/** 下一章 — jump to the next chapter (章节模式). */
+class NextChapterAction : ReaderAction() {
+    override fun perform(project: com.intellij.openapi.project.Project, controller: ReaderController) {
+        if (!controller.nextChapter()) ReaderStatusBar.flash(project, "已经是最后一章了。")
+    }
+
+    override fun update(event: AnActionEvent) {
+        val project = event.project ?: return
+        event.presentation.isEnabled = project.getService(ReadingEngine::class.java).book != null
     }
 }
 
@@ -233,7 +262,7 @@ class BossKeyAction : ReaderAction() {
             controller.showReading()
         } else {
             controller.clearScreen()
-            ReaderLog.load("已隐藏阅读内容。再次按【有人来了就按我】(Ctrl+Alt+B) 恢复阅读。")
+            ReaderLog.load("已隐藏阅读内容。再次按【有人来了就按我】(Ctrl+Alt+X) 恢复阅读。")
         }
     }
 }

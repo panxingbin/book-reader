@@ -21,7 +21,9 @@ import javax.swing.event.DocumentListener
  * 章节列表 / 跳转 — pick a chapter and jump to it.
  *
  * The list is filtered as the user types, which matters for a 3000-chapter web
- * novel where scrolling is hopeless.
+ * novel where scrolling is hopeless. The chapter the reader is currently inside
+ * is marked with ▶ and pre-selected (and scrolled into view) when the dialog
+ * opens; with an empty filter the selection stays on it.
  */
 class ChapterListDialog(private val project: Project) : DialogWrapper(project) {
 
@@ -32,13 +34,16 @@ class ChapterListDialog(private val project: Project) : DialogWrapper(project) {
     private val filterField = JBTextField()
     private val countLabel = JLabel()
 
-    private val allRows: List<Row> = engine.chapters.map { Row(it.index, "${it.number}. ${it.title}") }
+    private val currentChapter: Int = engine.currentChapter()
+
+    private val allRows: List<Row> = engine.chapters.map {
+        Row(it.index, (if (it.index == currentChapter) "▶ " else "") + "${it.number}. ${it.title}")
+    }
 
     init {
         title = "章节列表 / 跳转"
         init()
         reload("")
-        list.selectedIndex = engine.currentChapter().coerceIn(0, (allRows.size - 1).coerceAtLeast(0))
         list.addMouseListener(object : java.awt.event.MouseAdapter() {
             override fun mouseClicked(event: java.awt.event.MouseEvent) {
                 if (event.clickCount >= 2) doOKAction()
@@ -71,7 +76,18 @@ class ChapterListDialog(private val project: Project) : DialogWrapper(project) {
         val matches = if (q.isEmpty()) allRows else allRows.filter { it.text.contains(q, ignoreCase = true) }
         for (row in matches) model.addElement(row)
         countLabel.text = "共 ${allRows.size} 章，匹配 ${matches.size} 章"
-        if (model.size() > 0) list.selectedIndex = 0
+        if (model.size() > 0) {
+            // No filter: keep the selection on the chapter being read (and show
+            // it — a 3000-chapter list starts far away from it). A filter starts
+            // on the first match, as before.
+            val select = if (q.isEmpty()) {
+                (0 until model.size()).firstOrNull { model[it].index == currentChapter } ?: 0
+            } else {
+                0
+            }
+            list.selectedIndex = select
+            list.ensureIndexIsVisible(select)
+        }
     }
 
     override fun doOKAction() {

@@ -58,6 +58,12 @@ class ReaderSettings : PersistentStateComponent<Element> {
     /** 章节正则 — how a local .txt / .epub chapter title is recognised. */
     var chapterRegex: String = DEFAULT_CHAPTER_REGEX
 
+    /**
+     * 是否询问章节正则 — `false` opens a local chapters-mode book directly with the
+     * stored [chapterRegex] instead of prompting for it every time.
+     */
+    var askChapterRegex: Boolean = true
+
     /** 内容过滤 — one regular expression per line; matching display lines are dropped. */
     var contentFilter: String = ""
 
@@ -70,7 +76,7 @@ class ReaderSettings : PersistentStateComponent<Element> {
     /** 字体选择 — `RRGGBB` (no `#`), blank means "follow the theme". */
     var fontColorHex: String = ""
 
-    /** 全章节模式每页显示的行数. */
+    /** 全章节模式每页显示的行数. `0` = 按窗口高度自适应. */
     var linesPerPage: Int = 30
 
     /** 自动下一页的间隔（秒）. */
@@ -153,6 +159,7 @@ class ReaderSettings : PersistentStateComponent<Element> {
         e.setAttribute("loadLog", loadLog.toString())
         e.setAttribute("clearText", clearText)
         e.setAttribute("chapterRegex", chapterRegex)
+        e.setAttribute("askChapterRegex", askChapterRegex.toString())
         e.setAttribute("contentFilter", contentFilter)
         e.setAttribute("fontFamily", fontFamily)
         e.setAttribute("fontSize", fontSize.toString())
@@ -177,6 +184,7 @@ class ReaderSettings : PersistentStateComponent<Element> {
         state.getAttributeValue("loadLog")?.toBooleanStrictOrNull()?.let { loadLog = it }
         state.getAttributeValue("clearText")?.let { clearText = it }
         state.getAttributeValue("chapterRegex")?.let { chapterRegex = it }
+        state.getAttributeValue("askChapterRegex")?.toBooleanStrictOrNull()?.let { askChapterRegex = it }
         state.getAttributeValue("contentFilter")?.let { contentFilter = it }
         state.getAttributeValue("fontFamily")?.let { fontFamily = it }
         state.getAttributeValue("fontSize")?.toIntOrNull()?.let { fontSize = it }
